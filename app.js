@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=77';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=78';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1232,6 +1232,25 @@ function showSlide(i) {
 }
 function startHero() { stopHero(); if (hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
 function stopHero() { clearInterval(hero.timer); }
+// Swipe the hero artwork left/right to change slides (vertical scrolling and taps are untouched).
+let heroTouch = null, heroSwipedAt = 0;
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  heroTouch = e.touches.length === 1 && e.target.closest?.('.hero') && !e.target.closest('[data-hero-controls]') ? { x: t.clientX, y: t.clientY } : null;
+  if (heroTouch) stopHero();                                  // don't auto-advance under the finger
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!heroTouch) return;
+  const t = e.changedTouches[0], dx = t.clientX - heroTouch.x, dy = t.clientY - heroTouch.y;
+  heroTouch = null;
+  if (Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy) * 1.5) { heroSwipedAt = performance.now(); showSlide(hero.idx + (dx < 0 ? 1 : -1)); }
+  startHero();
+}, { passive: true });
+document.addEventListener('touchcancel', () => { if (heroTouch) { heroTouch = null; startHero(); } }, { passive: true });
+// A swipe must never also open the film under the finger.
+document.addEventListener('click', e => {
+  if (performance.now() - heroSwipedAt < 500 && e.target.closest?.('.hero')) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 window.addEventListener('hashchange', () => { if (location.hash === '#search') { history.replaceState(null, '', location.pathname + (lastRoute || '')); openSearch(); return; } if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); openSetup(); return; } render(); });
 
 // ---------- search ----------

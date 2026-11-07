@@ -414,3 +414,6 @@ body{overflow-x:clip}
 @media (min-width:601px){
   #search #results{grid-template-columns:repeat(auto-fill,clamp(128px,11.5vw,200px));justify-content:start;gap:34px 20px}
 }
+
+/* Let the browser keep vertical scrolling while we handle horizontal swipes on the hero. */
+.hero{touch-action:pan-y}
