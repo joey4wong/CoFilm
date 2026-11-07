@@ -929,8 +929,7 @@ function applyGlass() {
     const S = Math.round(bezel * 3.2);
     const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
     activeFilters.add(id);
-    const light = document.documentElement.dataset.theme === 'light';
-    el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(${light ? 1.2 : 1.5}) brightness(${light ? 1.01 : 1.05})`;
+    el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
   // Bound resize history without removing filters still used by visible glass.
   for (const id of lensCache.keys()) {
@@ -1027,38 +1026,26 @@ function ensureArtwork() {
 }
 
 function layoutLightArtwork() {
+  // Measure shared layout; never change content size or position for a theme.
   const light = document.documentElement.dataset.theme === 'light';
-  const hero = $('.hero'), detail = $('.detail');
-  if (hero) {
-    hero.classList.toggle('art-light', light);
-    if (!light) { hero.style.removeProperty('--art-height'); hero.style.removeProperty('--art-fade'); hero.style.removeProperty('--hcontent-top'); }
-    else {
-      const slide = hero.querySelector('.slide.on'), cta = slide?.querySelector('[data-play-item]'), content = slide?.querySelector('.hcontent');
-      if (cta && content) {
-        const base = hero.getBoundingClientRect().top;
-        const solid = Math.round(cta.getBoundingClientRect().bottom - base);
-        const fade = Math.round(Math.min(170, Math.max(80, innerWidth * .1)));
-        const height = solid + fade;   // solid part ends exactly at the PLAY button
-        hero.style.setProperty('--art-fade', fade + 'px');
-        hero.style.setProperty('--art-height', height + 'px');
-        hero.style.setProperty('--hcontent-top', Math.max(96, solid - Math.round(content.getBoundingClientRect().height) - 2) + 'px');
-      }
-    }
-  }
-  if (detail) {
-    detail.classList.toggle('art-light', light);
-    if (!light) { detail.style.removeProperty('--art-height'); detail.style.removeProperty('--art-fade'); }
-    else {
-      const cta = detail.querySelector('.dleft .pill'), info = detail.querySelector('.infobox');
-      if (cta) {
-        const base = detail.getBoundingClientRect().top;
-        const solid = Math.round(cta.getBoundingClientRect().bottom - base);
-        const fade = Math.round(Math.min(190, Math.max(90, innerWidth * .1)));
-        const height = solid + fade;   // solid part ends exactly at the PLAY button
-        detail.style.setProperty('--art-fade', fade + 'px');
-        detail.style.setProperty('--art-height', height + 'px');
-      }
-    }
+  for (const root of document.querySelectorAll('.hero,.detail')) {
+    root.style.removeProperty('--art-height'); root.style.removeProperty('--art-fade'); root.style.removeProperty('--hcontent-top');
+    const images = root.querySelectorAll('.slide .bg,.detail > .bg');
+    images.forEach(bg => {
+      for (const prop of ['--art-solid','--art-mid1','--art-mid2','--art-end']) bg.style.removeProperty(prop);
+      if (!light) return;
+      const slide = bg.closest('.slide');
+      const cta = slide ? slide.querySelector('[data-play-item]') : root.querySelector('.dleft .pill');
+      if (!cta) return;
+      const base = root.getBoundingClientRect().top;
+      const full = bg.offsetHeight;
+      const solid = Math.max(0, Math.min(full - 1, cta.getBoundingClientRect().bottom - base));
+      const fade = Math.max(1, Math.min(full - solid, Math.min(170, Math.max(80, innerWidth * .1))));
+      bg.style.setProperty('--art-solid', solid.toFixed(2) + 'px');
+      bg.style.setProperty('--art-mid1', (solid + fade * .28).toFixed(2) + 'px');
+      bg.style.setProperty('--art-mid2', (solid + fade * .7).toFixed(2) + 'px');
+      bg.style.setProperty('--art-end', (solid + fade).toFixed(2) + 'px');
+    });
   }
 }
 function settleLightArtwork() { requestAnimationFrame(layoutLightArtwork); setTimeout(layoutLightArtwork, 350); setTimeout(layoutLightArtwork, 1200); }

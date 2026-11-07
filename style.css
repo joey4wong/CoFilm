@@ -8,7 +8,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 #ambient::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(10,10,10,.55) 55%,var(--bg) 100%)}
 /* nav */
 #nav{position:fixed;top:26px;left:50%;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:4px;padding:6px;border-radius:999px;background:var(--glass);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);border:1px solid rgba(255,255,255,.08);box-shadow:0 10px 40px rgba(0,0,0,.25)}
-#nav a{padding:9px 22px;border-radius:999px;color:rgba(255,255,255,.75);font-size:15px;font-weight:500;transition:.2s}
+#nav a{padding:9px 22px;border-radius:999px;color:rgba(255,255,255,.75);font-size:15px;font-weight:500;transition:color .2s,background-color .2s,box-shadow .2s}
 #nav a:hover{color:#fff}
 #nav a.on{background:#fff;color:#111;font-weight:600}
 main{min-height:100vh}
@@ -282,33 +282,22 @@ body{overflow-x:clip}
   .cast-next{flex-basis:34px;width:34px;height:34px;margin-top:calc(12px + var(--cast-card-width) * .625 - 17px)}
 }
 
-/* Automatic day/night theme. Movie artwork and the video canvas retain their colors. */
+/* Themes share all geometry and lens optics. Only paint and text colors differ. */
 :root{color-scheme:dark}
-:root[data-theme="light"]{color-scheme:light;--bg:#f5f6f8;--text:#171b24;--muted:rgba(23,27,36,.72);--dim:rgba(23,27,36,.6);--glass:rgba(255,255,255,.28);--line:rgba(23,27,36,.12)}
-[data-theme="light"] #ambient{display:none}
-[data-theme="light"] #ambient::after{background:linear-gradient(180deg,rgba(245,246,248,.25),var(--bg) 100%)}
-[data-theme="light"] .slide::after{background:none}
-[data-theme="light"] .detail .bg::after{background:none}
-[data-theme="light"] .logo{filter:grayscale(1) brightness(.18)}
-[data-theme="light"] .metarow{color:rgba(23,27,36,.85)}
-[data-theme="light"] .metarow .dot{background:rgba(23,27,36,.45)}
-[data-theme="light"] .tag.gray{background:rgba(23,27,36,.12)}
-[data-theme="light"] .desc{color:#252a35;text-shadow:none}
-[data-theme="light"] #nav a{color:rgba(23,27,36,.75)}
-[data-theme="light"] #nav a:hover{color:#11151d}
-[data-theme="light"] #nav a.on{color:#fff;background:#242832;box-shadow:0 2px 8px rgba(20,24,32,.12)}
-[data-theme="light"] .lg{background:rgba(255,255,255,.2)!important;box-shadow:inset 0 0 0 .5px rgba(23,27,36,.12),inset 0 1px 0 rgba(255,255,255,.5),0 8px 30px rgba(23,27,36,.1),0 1px 3px rgba(23,27,36,.08);-webkit-backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01);backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01)}
-[data-theme="light"] #nav.lg{-webkit-backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01);backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01)}
-[data-theme="light"] .infobox.lg{background:rgba(250,251,253,.89)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.65),0 10px 36px rgba(17,23,34,.12)}
-[data-theme="light"] .infobox.lg dd{color:#202631;text-shadow:none}
-[data-theme="light"] .infobox.lg dt{color:#596272;text-shadow:none}
-[data-theme="light"] .rate{color:var(--text)}
-[data-theme="light"] .pill{background:#1b202b;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 7px 20px rgba(23,27,36,.15)}
-[data-theme="light"] .pill svg{fill:#fff}
-[data-theme="light"] .pill.ghost{background:rgba(23,27,36,.06);color:var(--text);border-color:rgba(23,27,36,.12);box-shadow:0 4px 16px rgba(23,27,36,.06)}
-[data-theme="light"] .pill.ghost svg{fill:none}
-[data-theme="light"] .duo button,[data-theme="light"] .duo a{color:var(--text)}
-[data-theme="light"] .duo.lg i{background:rgba(23,27,36,.2)}
+:root[data-theme="light"]{color-scheme:light;--bg:#f5f6f8;--text:#171b24;--muted:rgba(23,27,36,.72);--dim:rgba(23,27,36,.6);--glass:rgba(255,255,255,.08);--line:rgba(23,27,36,.12)}
+[data-theme="light"] #ambient{visibility:hidden}
+[data-theme="light"] .lg{background:rgba(255,255,255,.08)!important;box-shadow:inset 0 0 0 .5px rgba(23,27,36,.12),inset 0 1px 0 rgba(255,255,255,.35),0 10px 34px rgba(23,27,36,.14),0 1px 3px rgba(23,27,36,.12)}
+[data-theme="light"] #nav a{color:#1b2330;text-shadow:0 1px 3px rgba(255,255,255,.85)}
+[data-theme="light"] #nav a:hover{color:#050a12}
+[data-theme="light"] #nav a.on{background:rgba(255,255,255,.2);color:#111b28;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 0 .5px rgba(23,27,36,.12)}
+[data-theme="light"] .infobox.lg{background:rgba(8,12,20,.18)!important;color:#f3f3f3}
+[data-theme="light"] .infobox.lg dt{color:rgba(255,255,255,.86);text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.5)}
+[data-theme="light"] .infobox.lg dd,[data-theme="light"] .infobox .rate{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.5)}
+[data-theme="light"] :is(.hero,.dleft){color:#f3f3f3}
+[data-theme="light"] .dleft .fileinfo{color:rgba(255,255,255,.8);text-shadow:0 1px 2px rgba(0,0,0,.9)}
+[data-theme="light"] :is(.hero .desc,.dleft .desc){color:rgba(255,255,255,.96);text-shadow:0 1px 3px rgba(0,0,0,.8)}
+[data-theme="light"] .hero-link:focus-visible{outline-color:#fff}
+[data-theme="light"] .cast-next:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
 [data-theme="light"] .card .pos{background:linear-gradient(135deg,#e0e3e9,#cbd1db);box-shadow:0 5px 16px rgba(23,27,36,.14);outline-color:rgba(23,27,36,.08)}
 [data-theme="light"] .card:hover .pos{box-shadow:0 12px 28px rgba(23,27,36,.2)}
 [data-theme="light"] .chips button{background:rgba(255,255,255,.65);border-color:rgba(23,27,36,.12);color:var(--muted)}
@@ -322,12 +311,13 @@ body{overflow-x:clip}
 [data-theme="light"] .searchbox input::placeholder,[data-theme="light"] .box input::placeholder{color:var(--dim)}
 [data-theme="light"] .box{background:rgba(255,255,255,.95);border-color:rgba(23,27,36,.1);box-shadow:0 15px 50px rgba(23,27,36,.12)}
 [data-theme="light"] .box input{background:#f5f6f8;border-color:rgba(23,27,36,.15);color:var(--text)}
+[data-theme="light"] .box .pill{background:#1b202b;color:#fff;box-shadow:0 6px 20px rgba(23,27,36,.14)}
+[data-theme="light"] .box .pill.ghost{background:rgba(23,27,36,.06);color:var(--text);border-color:rgba(23,27,36,.12)}
 [data-theme="light"] #codeMsg{color:#b72626!important}
 [data-theme="light"] #toast{background:rgba(255,255,255,.92);border-color:rgba(23,27,36,.12)}
-[data-theme="light"] .hero-link:focus-visible,[data-theme="light"] .cast-next:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
-/* Watching stays cinema-dark even while the surrounding website is in daylight mode. */
+[data-theme="light"] .rate svg.ic{stroke:none}
+/* Playback remains cinema-dark in either theme. */
 #player{color:#f3f3f3;color-scheme:dark}
-[data-theme="light"] #player .pill.ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.14);box-shadow:0 4px 16px rgba(0,0,0,.25)}
 
 /* Same-genre recommendations: a finite poster rail with the arrow on its right. */
 .recommend-shell{--recommend-card-width:clamp(128px,11.5vw,200px);display:flex;align-items:flex-start;gap:16px;padding-inline:var(--pad)}
@@ -342,52 +332,8 @@ body{overflow-x:clip}
   .recommend-next{flex-basis:34px;width:34px;height:34px;margin-top:calc(12px + var(--recommend-card-width) * .75 - 17px)}
 }
 
-/* Daylight artwork: the picture runs down to the PLAY button, then fades into the page. */
-[data-theme="light"] .hero{--art-height:60vh;--art-fade:140px;height:calc(var(--art-height) + 84px);min-height:0}
-[data-theme="light"] .hero .slide .bg{inset:0 0 auto;height:var(--art-height);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--art-fade)),rgba(0,0,0,.78) calc(100% - var(--art-fade) * .72),rgba(0,0,0,.28) calc(100% - var(--art-fade) * .3),transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--art-fade)),rgba(0,0,0,.78) calc(100% - var(--art-fade) * .72),rgba(0,0,0,.28) calc(100% - var(--art-fade) * .3),transparent 100%)}
-[data-theme="light"] .hero .slide .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,12,20,.78),rgba(7,12,20,.54) 28%,rgba(7,12,20,.14) 52%,transparent 72%);-webkit-mask-image:linear-gradient(#000 0,#000 calc(100% - var(--art-fade)),transparent 100%);mask-image:linear-gradient(#000 0,#000 calc(100% - var(--art-fade)),transparent 100%)}
-[data-theme="light"] .hero .hcontent{top:var(--hcontent-top,200px);bottom:auto;color:#fff}
-[data-theme="light"] .hero .logo{max-height:112px;margin-bottom:14px;filter:drop-shadow(0 2px 14px rgba(0,0,0,.55))}
-[data-theme="light"] .hero .tname{font-size:clamp(32px,4vw,64px);color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.6)}
-[data-theme="light"] .hero .metarow{color:rgba(255,255,255,.94);text-shadow:0 1px 10px rgba(0,0,0,.6)}
-[data-theme="light"] .hero .desc{-webkit-line-clamp:3;margin-bottom:20px;color:rgba(255,255,255,.96);text-shadow:0 1px 12px rgba(0,0,0,.65)}
-[data-theme="light"] .dots{bottom:20px}
-[data-theme="light"] .rows{margin-top:0}
-[data-theme="light"] .detail{--art-height:65vh;--art-fade:160px}
-[data-theme="light"] .detail .bg{height:var(--art-height);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--art-fade)),rgba(0,0,0,.78) calc(100% - var(--art-fade) * .72),rgba(0,0,0,.28) calc(100% - var(--art-fade) * .3),transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--art-fade)),rgba(0,0,0,.78) calc(100% - var(--art-fade) * .72),rgba(0,0,0,.28) calc(100% - var(--art-fade) * .3),transparent 100%)}
-[data-theme="light"] .detail .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,12,20,.8),rgba(7,12,20,.56) 30%,rgba(7,12,20,.12) 57%,transparent 75%);-webkit-mask-image:linear-gradient(#000 0,#000 calc(100% - var(--art-fade)),transparent 100%);mask-image:linear-gradient(#000 0,#000 calc(100% - var(--art-fade)),transparent 100%)}
-[data-theme="light"] .dtop{padding-top:170px;align-items:flex-start;min-height:auto}
-[data-theme="light"] .detail .logo{max-height:112px;margin-bottom:16px;filter:drop-shadow(0 2px 14px rgba(0,0,0,.55))}
-[data-theme="light"] .detail .tname{color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.6)}
-[data-theme="light"] .detail .metarow{color:rgba(255,255,255,.94);text-shadow:0 1px 10px rgba(0,0,0,.6)}
-[data-theme="light"] .detail .desc{-webkit-line-clamp:3;margin-bottom:20px;color:rgba(255,255,255,.96);text-shadow:0 1px 12px rgba(0,0,0,.65)}
-[data-theme="light"] .detail .dleft .desc{margin-bottom:20px}
-[data-theme="light"] .detail .fileinfo{color:#46505f;text-shadow:none;background:rgba(250,251,253,.92);padding:9px 12px;border-radius:9px;display:table;max-width:100%;font-size:12px;line-height:1.65;border:1px solid rgba(28,38,54,.06)}
-[data-theme="light"] .infobox{margin-top:0;align-self:flex-start}
-[data-theme="light"] .infobox .rate{color:#202631}
-[data-theme="light"] #nav.lg{background:rgba(250,251,253,.76)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.7),0 6px 24px rgba(17,23,34,.1)}
-[data-theme="light"] .dots button::before{background:#9299a4;filter:none}
-[data-theme="light"] .dots button.on::before{background:#202631}
-@media(max-width:1100px){
-  [data-theme="light"] .dtop{justify-content:flex-start;flex-direction:column;align-items:stretch}
-  [data-theme="light"] .infobox{margin-top:0}
-}
-@media(max-width:820px){
-  [data-theme="light"] .dtop{padding-top:120px}
-  [data-theme="light"] .hero{height:calc(var(--art-height) + 56px)}
-  [data-theme="light"] .detail .desc,[data-theme="light"] .hero .desc{-webkit-line-clamp:4}
-}
-
-/* One daylight system: white-on-art controls, charcoal-on-light information. */
-[data-theme="light"] :is(.hero,.dleft) .metarow .dot{background:rgba(255,255,255,.65)}
-[data-theme="light"] :is(.hero,.dleft) .pill:not(.ghost){background:#fff;color:#17202c;box-shadow:0 4px 18px rgba(0,0,0,.16)}
-[data-theme="light"] :is(.hero,.dleft) .pill:not(.ghost) svg{fill:#17202c}
-[data-theme="light"] :is(.hero,.dleft) .pill.ghost{background:rgba(9,15,24,.48);color:#fff;border-color:rgba(255,255,255,.28);box-shadow:none;-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)}
-[data-theme="light"] .dleft .duo.lg{background:rgba(9,15,24,.48)!important}
-[data-theme="light"] .dleft .duo button{color:#fff}
-[data-theme="light"] :is(.hero .desc,.dleft .desc){text-shadow:0 1px 3px rgba(0,0,0,.65);font-weight:400}
-[data-theme="light"] .infobox.lg .rates{color:#202631}
-@media(max-width:820px){
- [data-theme="light"] :is(.hero .slide .bg,.detail .bg)::after{background:linear-gradient(90deg,rgba(7,12,20,.76),rgba(7,12,20,.5) 70%,rgba(7,12,20,.24))}
-}
-[data-theme="light"] .rate svg.ic{stroke:none}
+/* Paint-only daylight artwork: preserve dark-layout size, crop and placement. */
+[data-theme="light"] .slide::after{background:none}
+[data-theme="light"] :is(.hero .slide .bg,.detail .bg){-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%));mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%))}
+[data-theme="light"] .hero .slide .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,10,.75) 0%,rgba(10,10,10,.35) 45%,transparent 70%)}
+[data-theme="light"] .detail .bg::after{background:linear-gradient(90deg,rgba(10,10,10,.8),rgba(10,10,10,.3) 55%,rgba(10,10,10,.1))}
