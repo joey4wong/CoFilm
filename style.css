@@ -162,12 +162,12 @@ main{min-height:100vh}
 
 /* ratings */
 .rates{display:flex;flex-direction:column;gap:7px}
-.rate{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;transition:opacity .2s}
+.rate{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;color:#fff;text-decoration:none;transition:opacity .2s}
 .rate:hover{opacity:.8}
 .rate:hover span{text-decoration:underline}
-.rate i{font-style:normal;font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:5px;line-height:1.4}
+.rate i{white-space:nowrap;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:5px;line-height:1.4}
 .rate.imdb i{background:#f5c518;color:#000}
 .rate.rt i{background:#fa320a;color:#fff}
 .rate.db i{background:#00b51d;color:#fff}
 .rate span{font-weight:600}
-.rate small{color:rgba(255,255,255,.65);font-size:12.5px}
+.rate small{white-space:nowrap;color:rgba(255,255,255,.65);font-size:12.5px}
