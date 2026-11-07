@@ -5,50 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a0a0a">
 <title>我的影院</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='white' d='M8 5v14l11-7z'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
 </head>
 <body>
-<header id="top">
-  <div class="brand">我的影院</div>
-  <div class="controls">
-    <input id="q" type="search" placeholder="搜索片名、演员、导演…" autocomplete="off">
-    <select id="sort" title="排序">
-      <option value="added">最近添加</option>
-      <option value="year">上映年份</option>
-      <option value="rating">评分</option>
-      <option value="title">片名</option>
-    </select>
-    <button id="refresh" class="ghost" title="重新读取 OneDrive">刷新</button>
-    <button id="settingsBtn" class="ghost" title="设置">设置</button>
-  </div>
-</header>
-<nav id="genres"></nav>
-<main>
-  <section id="continue" hidden>
-    <h2>继续观看</h2>
-    <div class="row" id="continueRow"></div>
-  </section>
-  <div id="status"></div>
-  <div id="wall"></div>
-</main>
+<div id="ambient"></div>
+<nav id="nav" aria-label="Main">
+  <a href="#/" data-route="home">首页</a>
+  <a href="#/movies" data-route="movies">电影</a>
+  <a href="#/shows" data-route="shows">剧集</a>
+  <a href="#/genres" data-route="genres">分类</a>
+  <span class="sep"></span>
+  <button id="searchBtn" class="icon" aria-label="搜索"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+  <button id="refresh" class="icon" aria-label="刷新"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  <button id="settingsBtn" class="icon" aria-label="设置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+</nav>
 
-<div id="detail" class="overlay" hidden></div>
+<main id="view"></main>
+<div id="toast" hidden></div>
+
+<div id="search" class="overlay" hidden>
+  <div class="searchbox">
+    <input id="q" type="search" placeholder="搜索片名、演员、导演…" autocomplete="off">
+    <button class="icon" data-close-search aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="results" class="grid"></div>
+</div>
+
 <div id="player" class="overlay" hidden>
-  <div class="ptop"><span id="ptitle"></span><button id="pclose" class="ghost">关闭 ✕</button></div>
+  <div class="ptop"><span id="ptitle"></span><button id="pclose" class="pill ghost">关闭</button></div>
   <div id="pwrap"></div>
 </div>
 
 <div id="setup" class="overlay" hidden>
   <div class="box">
     <h2>连接 OneDrive 电影文件夹</h2>
-    <p>粘贴电影文件夹的 OneDrive 分享链接（只读“Anyone with the link can view”）。链接只保存在这台设备的浏览器里，不会上传到任何地方。</p>
+    <p>粘贴电影文件夹的 OneDrive 只读分享链接。链接只保存在这台设备的浏览器里，不会上传到任何地方。</p>
     <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
-    <div class="actions"><button id="saveLink">保存并加载</button><button id="cancelSetup" class="ghost">取消</button></div>
-    <p class="small">换设备时：在这里重新粘贴链接即可。也可以在“设置”里清除缓存的影片信息。</p>
-    <button id="clearCache" class="ghost small">清除影片信息缓存</button>
+    <div class="actions"><button id="saveLink" class="pill">保存并加载</button><button id="cancelSetup" class="pill ghost">取消</button></div>
+    <button id="clearCache" class="pill ghost small">清除影片信息缓存</button>
   </div>
 </div>
 <script type="module" src="app.js"></script>

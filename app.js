@@ -122,7 +122,8 @@ async function findMeta(p) {
         id, name: d.name, year: d.releaseInfo || d.year, desc: d.description, rating: d.imdbRating,
         genres: d.genres || d.genre || [], cast: d.cast || [], director: d.director || [], runtime: d.runtime,
         poster: `https://images.metahub.space/poster/medium/${id}/img`, background: d.background, country: d.country,
-        videos: (d.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title })),
+        videos: (d.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title, thumb: v.thumbnail, desc: v.overview || v.description })),
+        logo: d.logo, writer: d.writer || [], awards: d.awards,
       };
     }
   } catch (e) { console.warn('meta', p.title, e); }
@@ -167,7 +168,7 @@ function buildItems(files) {
 async function load(force) {
   const link = LS.get('od:link');
   if (!link) { openSetup(); return; }
-  $('#status').textContent = '正在读取 OneDrive…';
+  toast('正在读取 OneDrive…');
   try {
     let files = !force && LS.get('od:files');
     const fresh = files && Date.now() - (LS.get('od:listedAt') || 0) < 40 * 60e3;
@@ -179,14 +180,13 @@ async function load(force) {
     state.listedAt = LS.get('od:listedAt');
     state.items = buildItems(files);
     render();
-    $('#status').textContent = `共 ${state.items.length} 部，正在获取海报和影片信息…`;
+    toast(`共 ${state.items.length} 部，正在获取海报和影片信息…`);
     await pool(state.items, 6, async it => { it.meta = await findMeta(it.parsed); scheduleRender(); });
-    $('#status').textContent = `共 ${state.items.length} 部`;
+    toast(`共 ${state.items.length} 部`, 2500);
     render();
   } catch (e) {
     console.error(e);
-    $('#status').innerHTML = `读取失败：${esc(e.message)}。<button class="ghost small" id="retry">重试</button>`;
-    $('#retry').onclick = () => load(true);
+    toast(`读取失败：${e.message}。点右上角刷新重试`, 8000);
   }
 }
 async function freshFile(f) {
@@ -195,104 +195,6 @@ async function freshFile(f) {
   for (const it of state.items) for (const x of it.files) if (x.id === f.id) return x;
   return f;
 }
-
-// ---------- render ----------
-let rt = 0;
-function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 250); }
-const title = it => it.meta?.name || it.parsed.title;
-const fmtSize = b => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (b / 1e6).toFixed(0) + ' MB';
-const fmtTime = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
-function quality(f) {
-  const n = f.name; const w = f.video?.width || 0;
-  if (/2160p|4k|uhd/i.test(n) || w >= 3000) return '4K';
-  if (/1080p/i.test(n) || w >= 1800) return '1080p';
-  if (/720p/i.test(n) || w >= 1200) return '720p';
-  return '';
-}
-function progressOf(it) {
-  let best = null;
-  for (const f of it.files) { const p = LS.get('pos:' + f.id); if (p && (!best || p.at > best.at)) best = { ...p, f }; }
-  return best;
-}
-function filtered() {
-  const q = state.q.trim().toLowerCase();
-  let list = state.items.filter(it => {
-    if (state.genre !== '全部' && !(it.meta?.genres || []).includes(state.genre)) return false;
-    if (!q) return true;
-    const hay = [title(it), it.parsed.title, ...(it.meta?.cast || []), ...(it.meta?.director || []), ...(it.meta?.genres || []), it.files.map(f => f.name).join(' ')].join(' ').toLowerCase();
-    return hay.includes(q);
-  });
-  const yr = it => parseInt(it.meta?.year || it.parsed.year || 0, 10);
-  const s = { added: (a, b) => b.added - a.added, year: (a, b) => yr(b) - yr(a), rating: (a, b) => (parseFloat(b.meta?.rating) || 0) - (parseFloat(a.meta?.rating) || 0), title: (a, b) => title(a).localeCompare(title(b)) }[state.sort];
-  return list.sort(s);
-}
-function render() {
-  // genres
-  const g = new Map();
-  for (const it of state.items) for (const x of it.meta?.genres || []) g.set(x, (g.get(x) || 0) + 1);
-  const gl = ['全部', ...[...g.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0])];
-  $('#genres').innerHTML = gl.map(x => `<button class="${x === state.genre ? 'on' : ''}" data-g="${esc(x)}">${esc(x)}</button>`).join('');
-  // continue watching
-  const cw = state.items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).slice(0, 12);
-  $('#continue').hidden = !cw.length;
-  $('#continueRow').innerHTML = cw.map(({ it, p }) => `<div class="cw" data-k="${esc(it.key)}" data-play="${esc(p.f.id)}">
-    <img loading="lazy" src="${esc(it.meta?.background || p.f.thumb || '')}" alt=""><div class="bar" style="width:${(p.t / p.d * 100).toFixed(1)}%"></div>
-    <div class="t">${esc(title(it))}${it.parsed.kind === 'series' ? ` · S${p.f.s}E${p.f.e}` : ''} · 剩 ${fmtTime(p.d - p.t)}</div></div>`).join('');
-  // wall
-  const week = Date.now() - 7 * 864e5;
-  $('#wall').innerHTML = filtered().map(it => {
-    const m = it.meta || {}, f = it.files[0], pr = progressOf(it);
-    const poster = m.id ? m.poster : f.thumb;
-    const meta = [m.year || it.parsed.year, m.runtime, it.parsed.kind === 'series' ? `${it.files.length} 集` : null].filter(Boolean).join(' · ');
-    const d = m.desc ? (m.desc.length > 150 ? m.desc.slice(0, 148) + '…' : m.desc) : '';
-    return `<div class="card" data-k="${esc(it.key)}">
-      <div class="poster">${poster ? `<img loading="lazy" src="${esc(poster)}" alt="" onerror="this.remove()">` : ''}
-        ${!m.id ? `<div class="ph">${esc(it.parsed.title)}</div>` : ''}
-        ${m.rating ? `<span class="badge">★ ${esc(m.rating)}</span>` : ''}
-        ${quality(f) ? `<span class="badge q">${quality(f)}</span>` : ''}
-        ${it.added > week ? '<span class="badge new">新</span>' : ''}
-        ${pr && pr.d ? `<div class="prog" style="width:${(pr.t / pr.d * 100).toFixed(1)}%"></div>` : ''}
-      </div>
-      <div class="info"><div class="t">${esc(title(it))}</div><div class="m">${esc(meta)}</div>
-        ${(m.genres || []).length ? `<div class="g">${m.genres.slice(0, 3).map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
-        ${d ? `<div class="d">${esc(d)}</div>` : ''}</div></div>`;
-  }).join('') || (state.items.length ? '<p style="color:var(--muted)">没有符合条件的影片</p>' : '');
-}
-
-// ---------- detail ----------
-function openDetail(key) {
-  const it = state.items.find(x => x.key === key); if (!it) return;
-  const m = it.meta || {}, f = it.files[0], pr = progressOf(it);
-  const v = f.video || {};
-  const bg = m.background || f.thumb || '';
-  const isS = it.parsed.kind === 'series';
-  const epName = (s, e) => (m.videos || []).find(x => x.s === s && x.e === e)?.name || '';
-  $('#detail').innerHTML = `<div class="dwrap">
-    <div class="hero" style="background-image:url('${esc(bg)}')"><button class="ghost x" data-close>✕</button></div>
-    <div class="dbody">
-      <img class="p" src="${esc(m.id ? m.poster : f.thumb || '')}" alt="" onerror="this.style.visibility='hidden'">
-      <div class="dmain">
-        <h1>${esc(title(it))}</h1>
-        <div class="m">${[m.year || it.parsed.year, m.runtime, m.country].filter(Boolean).map(esc).join(' · ')}${m.rating ? ` · <b>IMDb ★ ${esc(m.rating)}</b>` : ''}</div>
-        <div class="actions">
-          ${!isS ? `<button data-play="${esc(f.id)}">${pr && pr.t > 30 ? '从 ' + fmtTime(pr.t) + ' 继续' : '▶ 播放'}</button>
-          ${pr && pr.t > 30 ? `<button class="ghost" data-play="${esc(f.id)}" data-restart>从头播放</button>` : ''}` : ''}
-          <a href="${esc(f.web)}" target="_blank" rel="noopener"><button class="ghost">在 OneDrive 打开</button></a>
-          <button class="ghost" data-fix>修正匹配</button>
-        </div>
-        ${m.genres?.length ? `<div class="kv">类型：<span>${esc(m.genres.join(' / '))}</span></div>` : ''}
-        ${m.director?.length ? `<div class="kv">导演：<span>${esc(m.director.join('、'))}</span></div>` : ''}
-        ${m.cast?.length ? `<div class="kv">主演：<span>${esc(m.cast.join('、'))}</span></div>` : ''}
-        ${m.desc ? `<p class="desc">${esc(m.desc)}</p>` : '<p class="desc" style="color:var(--muted)">没找到这部片的资料，可以点“修正匹配”输入 IMDb 编号（例如 tt0274812）或英文片名。</p>'}
-        ${isS ? `<div class="eps">${it.files.map(x => { const p = LS.get('pos:' + x.id); return `<div class="ep"><span>S${x.s}E${String(x.e).padStart(2, '0')} ${esc(epName(x.s, x.e))}${p && p.d ? ` <small style="color:var(--muted)">· 看到 ${fmtTime(p.t)}</small>` : ''}</span><button class="small" data-play="${esc(x.id)}">▶</button></div>`; }).join('')}</div>` : ''}
-        ${it.files.map(x => `<div class="file">${esc(x.name)}<br>${[fmtSize(x.size), x.video?.width ? x.video.width + '×' + x.video.height : '', x.video?.fourCC, x.subs.length ? '字幕：' + x.subs.map(s => s.name.split('.').pop()).join(', ') : '无外挂字幕'].filter(Boolean).map(esc).join(' · ')}</div>`).join('')}
-      </div>
-    </div></div>`;
-  $('#detail').hidden = false;
-  $('#detail').dataset.k = key;
-  document.body.style.overflow = 'hidden';
-}
-function closeDetail() { $('#detail').hidden = true; document.body.style.overflow = ''; }
 
 // ---------- subtitles ----------
 function assToSrt(txt) {
@@ -368,6 +270,214 @@ function closePlayer() {
   render();
 }
 
+
+// ---------- UI helpers ----------
+let toastT = 0;
+function toast(msg, ms = 0) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); if (ms) toastT = setTimeout(() => { t.hidden = true; }, ms);
+}
+let rt = 0;
+function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 400); }
+function closeDetail() {}
+const title = it => it.meta?.name || it.parsed.title;
+const fmtSize = b => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (b / 1e6).toFixed(0) + ' MB';
+const fmtTime = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const fmtRuntime = r => { const n = parseInt(r, 10); if (!n) return r || ''; return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`; };
+const yearOf = it => String(it.meta?.year || it.parsed.year || '').slice(0, 4);
+const logoOf = it => it.meta?.id ? (it.meta.logo || `https://images.metahub.space/logo/medium/${it.meta.id}/img`) : '';
+const posterOf = it => it.meta?.id ? it.meta.poster : it.files[0].thumb;
+const bgOf = it => it.meta?.background || it.files[0].thumb || '';
+const enc = k => encodeURIComponent(k);
+function quality(f) {
+  const n = f.name; const w = f.video?.width || 0;
+  if (/2160p|4k|uhd/i.test(n) || w >= 3000) return '4K';
+  if (/1080p/i.test(n)) return '';
+  if (/720p/i.test(n) || (w && w < 1300)) return '720p';
+  return '';
+}
+function progressOf(it) {
+  let best = null;
+  for (const f of it.files) { const p = LS.get('pos:' + f.id); if (p && (!best || p.at > best.at)) best = { ...p, f }; }
+  return best;
+}
+const I = {
+  play: '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg>',
+  star: '<svg class="star" viewBox="0 0 24 24"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></svg>',
+  cal: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+  od: '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 1.5A3.3 3.3 0 0 0 7 18z"/></svg>',
+  fix: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg>',
+};
+function metaRow(it, extra = '') {
+  const m = it.meta || {}, g = (m.genres || [])[0];
+  const q = quality(it.files[0]);
+  const parts = [];
+  if (m.rating) parts.push(`<span>${I.star}${esc(m.rating)}</span>`);
+  if (yearOf(it)) parts.push(`<span>${I.cal}${esc(yearOf(it))}</span>`);
+  if (g) parts.push(`<span>${esc(g)}</span>`);
+  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} 集</span>`);
+  if (q) parts.push(`<span class="tag">${q}</span>`);
+  return `<div class="metarow">${parts.join('<span class="dot"></span>')}${extra}</div>`;
+}
+function titleBlock(it, big) {
+  const logo = logoOf(it);
+  return logo
+    ? `<img class="logo" src="${esc(logo)}" alt="${esc(title(it))}" onerror="this.outerHTML='<h1 class=&quot;tname&quot;>'+this.alt.replace(/</g,'&amp;lt;')+'</h1>'">`
+    : `<h1 class="tname">${esc(title(it))}</h1>`;
+}
+function card(it, opts = {}) {
+  const pr = progressOf(it), f = it.files[0], q = quality(f);
+  const img = opts.wide ? bgOf(it) : posterOf(it);
+  const pct = pr && pr.d ? pr.t / pr.d * 100 : 0;
+  return `<a class="card" href="#/t/${enc(it.key)}">
+    <div class="pos"><div class="ph">${opts.wide ? '' : esc(title(it))}</div>${img ? `<img loading="lazy" src="${esc(img)}" alt="${esc(title(it))}" data-fb="${esc(f.thumb || '')}" onerror="if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.remove()}">` : ''}
+      ${q ? `<span class="q">${q}</span>` : ''}
+      ${pct > 1 ? `<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>` : ''}</div>
+    ${opts.caption ? `<div class="cap">${esc(title(it))}</div><div class="sub">${esc(opts.caption)}</div>` : ''}</a>`;
+}
+function row(name, list, opts = {}) {
+  if (!list.length) return '';
+  return `<section class="row ${opts.wide ? 'wide' : ''}"><h2>${esc(name)}</h2><div class="scroller">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div></section>`;
+}
+const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
+
+// ---------- views ----------
+const hero = { idx: 0, timer: 0, paused: false, list: [] };
+function viewHome() {
+  const items = state.items;
+  const byAdded = [...items].sort((a, b) => b.added - a.added);
+  hero.list = byAdded.filter(it => it.meta?.background).slice(0, 6);
+  if (hero.idx >= hero.list.length) hero.idx = 0;
+  const cw = items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).map(x => x.it);
+  const rated = items.filter(it => parseFloat(it.meta?.rating) >= 7).sort((a, b) => parseFloat(b.meta.rating) - parseFloat(a.meta.rating));
+  const gcount = new Map();
+  for (const it of items) for (const g of it.meta?.genres || []) gcount.set(g, (gcount.get(g) || 0) + 1);
+  const genres = [...gcount.entries()].filter(x => x[1] >= 3).sort((a, b) => b[1] - a[1]).slice(0, 6).map(x => x[0]);
+  const shows = items.filter(it => it.parsed.kind === 'series');
+  const classics = items.filter(it => parseInt(yearOf(it), 10) && parseInt(yearOf(it), 10) < 2000).sort((a, b) => yearOf(a) - yearOf(b));
+  const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}">
+      <div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
+      <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
+        <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? '继续' : 'PLAY'}</button>
+        <span class="duo"><a href="#/t/${enc(it.key)}" aria-label="详情">${I.info}</a></span></div></div></div>`).join('');
+  return `${hero.list.length ? `<section class="hero">${slides}
+      <div class="dots"><button class="pp" id="heroPause" aria-label="暂停轮播">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="第 ${i + 1} 张"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
+    <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
+      ${row('继续观看', cw, { wide: true, caption: it => { const p = progressOf(it); return `剩余 ${fmtTime(p.d - p.t)}`; } })}
+      ${row('最近添加', byAdded.slice(0, 20))}
+      ${row('高分佳作', rated)}
+      ${row('剧集', shows)}
+      ${genres.map(g => row(gName(g), items.filter(it => it.meta?.genres?.includes(g)))).join('')}
+      ${row('经典老片', classics)}
+      ${!items.length ? '<p class="empty">还没有读取到影片。</p>' : ''}
+    </div>`;
+}
+const GENRE_ZH = { Drama: '剧情', Romance: '爱情', Comedy: '喜剧', Thriller: '惊悚', Horror: '恐怖', Crime: '犯罪', Mystery: '悬疑', Adventure: '冒险', History: '历史', Action: '动作', 'Sci-Fi': '科幻', Fantasy: '奇幻', War: '战争', Biography: '传记', Music: '音乐', Animation: '动画', Family: '家庭', Western: '西部', Documentary: '纪录片', Sport: '运动' };
+const gName = g => GENRE_ZH[g] ? `${GENRE_ZH[g]}` : g;
+function viewList(kind) {
+  const list = state.items.filter(it => it.parsed.kind === kind).sort((a, b) => b.added - a.added);
+  setAmbient(list[0] ? bgOf(list[0]) : '');
+  return `<div class="page"><h1>${kind === 'movie' ? '电影' : '剧集'} <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
+    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ') })).join('') || '<p class="empty">暂无</p>'}</div></div>`;
+}
+function viewGenres(sel) {
+  const gcount = new Map();
+  for (const it of state.items) for (const g of it.meta?.genres || []) gcount.set(g, (gcount.get(g) || 0) + 1);
+  const gs = [...gcount.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  sel = sel && gs.includes(sel) ? sel : gs[0];
+  const list = state.items.filter(it => it.meta?.genres?.includes(sel)).sort((a, b) => (parseFloat(b.meta?.rating) || 0) - (parseFloat(a.meta?.rating) || 0));
+  setAmbient(list[0] ? bgOf(list[0]) : '');
+  return `<div class="page"><h1>分类</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(gName(g))} · ${gcount.get(g)}</button>`).join('')}</div>
+    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.rating ? '★ ' + it.meta.rating : ''].filter(Boolean).join(' · ') })).join('')}</div></div>`;
+}
+function viewDetail(key) {
+  const it = state.items.find(x => x.key === key);
+  if (!it) return '<div class="page"><p class="empty">没找到这部片。</p></div>';
+  const m = it.meta || {}, f = it.files[0], pr = progressOf(it), isS = it.parsed.kind === 'series';
+  setAmbient(bgOf(it));
+  const resume = pr && pr.t > 30 && pr.t < pr.d - 60;
+  const infos = [
+    ['类型', isS ? '剧集' : '电影'], ['上映', m.year || it.parsed.year], ['片长', fmtRuntime(m.runtime)], ['类型', (m.genres || []).map(gName).join('、')],
+    ['评分', m.rating ? `${m.rating} / 10` : ''], ['导演', (m.director || []).join(', ')], ['主演', (m.cast || []).slice(0, 4).join(', ')], ['国家', m.country],
+  ].filter(x => x[1]);
+  infos[0][0] = '形式';
+  const epName = (s, e) => (m.videos || []).find(x => x.s === s && x.e === e) || {};
+  const people = [...(m.director || []).map(n => [n, '导演']), ...(m.cast || []).map(n => [n, '演员'])];
+  const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  const similar = state.items.filter(x => x !== it && (x.meta?.genres || []).some(g => (m.genres || []).includes(g)))
+    .map(x => ({ x, s: (x.meta.genres || []).filter(g => (m.genres || []).includes(g)).length })).sort((a, b) => b.s - a.s).slice(0, 15).map(o => o.x);
+  return `<div class="detail"><div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
+    <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it)}
+      <p class="desc">${esc(m.desc || '没找到这部片的资料，可以点下面的“修正匹配”。')}</p>
+      <div class="hbtns">
+        ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? '继续 S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
+              : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? '继续 ' + fmtTime(pr.t) : 'PLAY'}</button>`}
+        <span class="duo">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="从头播放">${I.restart}</button><i></i>` : ''}
+          <a href="${esc(f.web)}" target="_blank" rel="noopener" title="在 OneDrive 打开">${I.od}</a><i></i>
+          <button data-fix="${esc(it.key)}" title="修正匹配">${I.fix}</button></span>
+      </div>
+      <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, f.subs.length ? '外挂字幕 ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : ''].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} 个文件 · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
+    </div>
+    <div class="infobox"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div></div>
+    ${isS ? `<section class="row"><h2>剧集列表</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · 看到 ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
+    ${people.length ? `<section class="row"><h2>演职人员</h2><div class="cast">${people.map(([n, r]) => `<div class="person"><div class="face" style="background:linear-gradient(160deg,hsl(${hue(n)} 35% 32%),hsl(${(hue(n) + 40) % 360} 30% 16%))">${esc(n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div><div class="n">${esc(n)}</div><div class="r">${r}</div></div>`).join('')}</div></section>` : ''}
+    ${row('相似影片', similar)}
+    <div style="height:40px"></div></div>`;
+}
+
+// ---------- router ----------
+function routeInfo() {
+  const h = location.hash.replace(/^#/, '') || '/';
+  if (h.startsWith('/t/')) return { name: 'detail', arg: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith('/movies')) return { name: 'movies' };
+  if (h.startsWith('/shows')) return { name: 'shows' };
+  if (h.startsWith('/genres')) return { name: 'genres', arg: decodeURIComponent(h.split('/')[2] || '') };
+  return { name: 'home' };
+}
+let lastRoute = '';
+function render() {
+  const r = routeInfo();
+  const sig = location.hash;
+  const keepScroll = sig === lastRoute;
+  const y = scrollY;
+  let html = '';
+  if (r.name === 'detail') html = viewDetail(r.arg);
+  else if (r.name === 'movies') html = viewList('movie');
+  else if (r.name === 'shows') html = viewList('series');
+  else if (r.name === 'genres') html = viewGenres(r.arg);
+  else html = viewHome();
+  $('#view').innerHTML = html;
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
+  if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
+  scrollTo(0, keepScroll ? y : 0);
+  lastRoute = sig;
+  if (!$('#search').hidden) renderSearch();
+}
+function showSlide(i) {
+  if (!hero.list.length) return;
+  hero.idx = (i + hero.list.length) % hero.list.length;
+  document.querySelectorAll('.slide').forEach(s => s.classList.toggle('on', +s.dataset.i === hero.idx));
+  document.querySelectorAll('.dots [data-slide]').forEach(d => d.classList.toggle('on', +d.dataset.slide === hero.idx));
+  setAmbient(bgOf(hero.list[hero.idx]));
+}
+function startHero() { stopHero(); if (!hero.paused && hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
+function stopHero() { clearInterval(hero.timer); }
+window.addEventListener('hashchange', render);
+
+// ---------- search ----------
+function renderSearch() {
+  const q = $('#q').value.trim().toLowerCase();
+  const list = !q ? [...state.items].sort((a, b) => b.added - a.added) : state.items.filter(it => [title(it), it.parsed.title, ...(it.meta?.cast || []), ...(it.meta?.director || []), ...(it.meta?.genres || []).map(g => g + ' ' + gName(g)), yearOf(it), it.files.map(f => f.name).join(' ')].join(' ').toLowerCase().includes(q));
+  $('#results').innerHTML = list.map(it => card(it, { caption: yearOf(it) })).join('') || '<p class="empty">没有找到</p>';
+}
+function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
+function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
+$('#searchBtn').onclick = openSearch;
+$('#q').oninput = renderSearch;
+
 // ---------- setup ----------
 function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#setup').hidden = false; }
 $('#saveLink').onclick = () => {
@@ -381,37 +491,45 @@ $('#settingsBtn').onclick = openSetup;
 $('#refresh').onclick = () => load(true);
 
 // ---------- events ----------
-$('#q').oninput = e => { state.q = e.target.value; render(); };
-$('#sort').onchange = e => { state.sort = e.target.value; LS.set('ui:sort', state.sort); render(); };
-$('#genres').onclick = e => { const b = e.target.closest('button'); if (b) { state.genre = b.dataset.g; render(); } };
 document.addEventListener('click', e => {
-  const p = e.target.closest('[data-play]');
-  if (p) { e.stopPropagation(); play(p.dataset.play, p.hasAttribute('data-restart')); return; }
-  if (e.target.closest('[data-close]') || e.target.id === 'detail') { closeDetail(); return; }
-  if (e.target.closest('[data-fix]')) {
-    const it = state.items.find(x => x.key === $('#detail').dataset.k);
+  const t = e.target;
+  const pl = t.closest('[data-play]');
+  if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
+  const pi = t.closest('[data-play-item]');
+  if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
+  const sl = t.closest('[data-slide]');
+  if (sl) { showSlide(+sl.dataset.slide); startHero(); return; }
+  if (t.closest('#heroPause')) { hero.paused = !hero.paused; t.closest('#heroPause').innerHTML = hero.paused ? I.play : I.pause; hero.paused ? stopHero() : startHero(); return; }
+  const g = t.closest('[data-genre]');
+  if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
+  if (t.closest('[data-close-search]')) { closeSearch(); return; }
+  if (t.closest('#search .card')) { closeSearch(); return; }
+  const fx = t.closest('[data-fix]');
+  if (fx) {
+    const it = state.items.find(x => x.key === fx.dataset.fix);
     const v = prompt('输入 IMDb 编号（如 tt0274812），或正确的英文片名：', it.meta?.id || it.parsed.title);
     if (!v) return;
     const ck = it.parsed.kind + ':' + keyOf(it.parsed);
     LS.del('meta:' + ck);
-    if (/^tt\d+$/.test(v.trim())) LS.set('fix:' + ck, v.trim());
-    else { LS.del('fix:' + ck); it.parsed = { ...it.parsed, title: v.trim() }; }
-    findMeta(it.parsed).then(m => { if (/^tt/.test(v.trim()) === false && m) { LS.set('fix:' + ck, m.id); LS.set('meta:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); openDetail(it.key); });
-    return;
+    const isId = /^tt\d+$/.test(v.trim());
+    if (isId) LS.set('fix:' + ck, v.trim()); else LS.del('fix:' + ck);
+    const p2 = isId ? it.parsed : { ...it.parsed, title: v.trim() };
+    findMeta(p2).then(m => { if (m) { LS.set('fix:' + ck, m.id); LS.set('meta:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? '已更新为 ' + m.name : '还是没找到', 3000); });
   }
-  const c = e.target.closest('.card');
-  if (c) openDetail(c.dataset.k);
 });
 $('#pclose').onclick = closePlayer;
 document.addEventListener('keydown', e => {
+  if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
-  else if (!$('#detail').hidden) closeDetail();
+  else if (!$('#search').hidden) closeSearch();
+  else if (!$('#setup').hidden) $('#setup').hidden = true;
 });
 
 // link via URL hash (#link=...) for quick setup on a new device
-const h = new URLSearchParams(location.hash.slice(1));
-if (h.get('link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); history.replaceState(null, '', location.pathname); }
-state.sort = LS.get('ui:sort') || 'added';
-$('#sort').value = state.sort;
+if (location.hash.startsWith('#link=')) {
+  const h = new URLSearchParams(location.hash.slice(1));
+  LS.set('od:link', h.get('link')); LS.del('od:files'); history.replaceState(null, '', location.pathname);
+}
+render();
 load();
