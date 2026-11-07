@@ -637,9 +637,7 @@ function viewDetail(key) {
       <div class="hbtns">
         ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
               : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
-        <span class="duo lg">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button><i></i>` : ''}
-          <a href="${esc(f.web)}" target="_blank" rel="noopener" title="Open in OneDrive">${I.od}</a><i></i>
-          <button data-fix="${esc(it.key)}" title="Fix match">${I.fix}</button></span>
+        ${resume && !isS ? `<span class="duo lg"><button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button></span>` : ''}
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
