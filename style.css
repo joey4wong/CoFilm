@@ -171,3 +171,4 @@ main{min-height:100vh}
 .adv{margin-top:14px;color:var(--muted)}
 .adv summary{cursor:pointer;margin-bottom:8px}
 #codeMsg{margin:4px 0 0}
+.rate .imdbmark{display:inline-flex;align-items:center;height:21px;padding:0 6px;border-radius:4px;background:#f5c518;color:#000;font:800 12.5px/1 "Helvetica Neue",Arial,sans-serif;letter-spacing:-.2px;width:auto}
