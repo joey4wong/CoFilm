@@ -853,6 +853,7 @@ function glassFilter(W, H, R, bezel, S) {
 }
 function applyGlass() {
   if (!GLASS_ON) return;
+  const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
     const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
     if (!W || !H) return;
@@ -860,8 +861,14 @@ function applyGlass() {
     const bezel = Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
     const S = Math.round(bezel * 3.2);
     const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
+    activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
+  // Bound resize history without removing filters still used by visible glass.
+  for (const id of lensCache.keys()) {
+    if (lensCache.size <= 16) break;
+    if (!activeFilters.has(id)) { lensCache.delete(id); document.getElementById(id)?.remove(); }
+  }
 }
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });

@@ -178,3 +178,73 @@ main{min-height:100vh}
 @media (max-width:820px){ #nav .searchlink span{display:none} #nav .searchlink{padding:8px 10px} }
 .pill.trailer{text-decoration:none;gap:8px}.pill.trailer svg{width:22px;height:22px;fill:none}
 .hbtns{flex-wrap:wrap}
+
+/* ---------- Responsive layout: centered max-width container + fluid sizes ---------- */
+:root{--pad:max(clamp(16px,4.5vw,64px),calc((100vw - 1480px)/2))}
+body{overflow-x:clip}
+.hero{height:clamp(560px,88vh,980px)}
+.hcontent{max-width:min(640px,calc(100% - 2 * var(--pad)))}
+.logo{width:auto;height:auto;max-width:min(520px,100%);max-height:clamp(100px,22vh,210px)}
+.tname{font-size:clamp(34px,5vw,80px)}
+.desc{font-size:clamp(15px,1.15vw,18px)}
+.card{width:clamp(128px,11.5vw,200px)}
+.row.wide .card{width:clamp(240px,22vw,380px)}
+.grid{grid-template-columns:repeat(auto-fill,minmax(clamp(128px,12vw,190px),1fr))}
+.person{flex-basis:clamp(120px,10vw,170px)}
+.person .face{width:100%;height:auto;aspect-ratio:4/5;font-size:clamp(34px,4vw,56px)}
+.ep img{width:clamp(120px,14vw,200px)}
+.dtop{gap:clamp(24px,4vw,56px);padding-inline:var(--pad)}
+.dleft{flex:1 1 0;min-width:0;max-width:760px}
+.infobox{flex:0 1 clamp(320px,30vw,440px);min-width:0;box-sizing:border-box}
+.infobox dd{overflow-wrap:anywhere;min-width:0}
+.fileinfo{max-width:100%}
+@media (max-width:1100px){
+  .dtop{flex-direction:column;align-items:stretch;justify-content:flex-end;padding-top:150px;gap:26px}
+  .dleft{max-width:none}
+  .infobox{flex:none;margin-top:0;width:100%;max-width:560px;align-self:flex-start}
+}
+@media (max-width:820px){
+  .infobox{max-width:none;align-self:stretch}
+  .person{flex-basis:112px}
+}
+@media (min-width:1900px){
+  .hero{height:clamp(640px,80vh,1000px)}
+  .infobox dl{font-size:16px}
+}
+.rate .imdbmark{flex:none;white-space:nowrap;overflow:visible}
+@media (max-width:480px){
+  .infobox dt{min-width:0}
+  .infobox dl{column-gap:10px;font-size:14px}
+  .rates{gap:8px}
+  .rate{gap:4px}
+  .rate .ic{width:17px;height:17px}
+  .rate .imdbmark{height:17px;font-size:10.5px;padding:0 4px}
+  .rate span{font-size:13px}
+}
+/* The rectangular IMDb wordmark must not inherit square icon widths. */
+.rate .ic.imdbmark{width:auto}
+.searchbox input{min-width:0}
+.searchbox .icon{flex:none}
+.box{width:calc(100% - 32px)}
+.ep img{flex:none}
+.ep > div{min-width:0;overflow-wrap:anywhere}
+.ptop{gap:12px}
+#ptitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pclose{flex:none}
+@media (max-width:360px){
+  .infobox{padding:16px 12px}
+  .infobox dl{column-gap:8px}
+  .infobox dt{font-size:10.5px;letter-spacing:.05em}
+  #nav a{padding-inline:9px;font-size:13px}
+  .searchbox{padding-inline:16px}
+  .ep{gap:12px}
+  .ep img{width:96px}
+}
+@media (max-height:650px) and (min-width:821px){
+  .hcontent{bottom:130px}
+  .hero{min-height:640px}
+}
+@media (max-width:820px){
+  .logo{max-height:140px}
+  .hero .logo{max-height:120px}
+}
