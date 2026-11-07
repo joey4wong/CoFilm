@@ -1003,6 +1003,49 @@ function setupRecommendationControls() {
 }
 window.addEventListener('resize', updateRecommendationControls);
 
+// ---------- Daylight artwork: runs to the PLAY button, then fades to the page ----------
+function layoutLightArtwork() {
+  const light = document.documentElement.dataset.theme === 'light';
+  const hero = $('.hero'), detail = $('.detail');
+  if (hero) {
+    hero.classList.toggle('art-light', light);
+    if (!light) { hero.style.removeProperty('--art-height'); hero.style.removeProperty('--art-fade'); hero.style.removeProperty('--hcontent-top'); }
+    else {
+      const slide = hero.querySelector('.slide.on'), cta = slide?.querySelector('[data-play-item]'), content = slide?.querySelector('.hcontent');
+      if (cta && content) {
+        const base = hero.getBoundingClientRect().top;
+        const solid = Math.round(cta.getBoundingClientRect().bottom - base);
+        const fade = Math.round(Math.min(170, Math.max(80, innerWidth * .1)));
+        const height = solid + fade;   // solid part ends exactly at the PLAY button
+        hero.style.setProperty('--art-fade', fade + 'px');
+        hero.style.setProperty('--art-height', height + 'px');
+        hero.style.setProperty('--hcontent-top', Math.max(96, solid - Math.round(content.getBoundingClientRect().height) - 2) + 'px');
+      }
+    }
+  }
+  if (detail) {
+    detail.classList.toggle('art-light', light);
+    if (!light) { detail.style.removeProperty('--art-height'); detail.style.removeProperty('--art-fade'); detail.style.removeProperty('--infobox-top'); }
+    else {
+      const cta = detail.querySelector('.dleft .pill'), info = detail.querySelector('.infobox');
+      if (cta) {
+        const base = detail.getBoundingClientRect().top;
+        const solid = Math.round(cta.getBoundingClientRect().bottom - base);
+        const fade = Math.round(Math.min(190, Math.max(90, innerWidth * .1)));
+        const height = solid + fade;   // solid part ends exactly at the PLAY button
+        detail.style.setProperty('--art-fade', fade + 'px');
+        detail.style.setProperty('--art-height', height + 'px');
+        if (info && innerWidth > 1100) {
+          const naturalTop = Math.round(info.getBoundingClientRect().top - base - (parseFloat(getComputedStyle(info).marginTop) || 0));
+          detail.style.setProperty('--infobox-top', Math.max(0, height + 18 - naturalTop) + 'px');
+        } else detail.style.removeProperty('--infobox-top');
+      }
+    }
+  }
+}
+window.addEventListener('cofilmthemechange', () => requestAnimationFrame(layoutLightArtwork));
+window.addEventListener('resize', () => { clearTimeout(layoutLightArtwork._t); layoutLightArtwork._t = setTimeout(layoutLightArtwork, 120); });
+
 // ---------- router ----------
 function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
@@ -1034,7 +1077,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); layoutLightArtwork(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
@@ -1043,6 +1086,7 @@ function showSlide(i) {
     const active = +s.dataset.i === hero.idx;
     s.classList.toggle('on', active); s.inert = !active; s.setAttribute('aria-hidden', String(!active));
   });
+  requestAnimationFrame(layoutLightArtwork);
   document.querySelectorAll('.dots [data-slide]').forEach(d => {
     const active = +d.dataset.slide === hero.idx;
     d.classList.toggle('on', active); d.setAttribute('aria-current', String(active));
