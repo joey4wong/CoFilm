@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 <script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
 </head>
 <body>
@@ -48,10 +48,12 @@
     <h2>连接 OneDrive 电影文件夹</h2>
     <p>粘贴电影文件夹的 OneDrive 只读分享链接。链接只保存在这台设备的浏览器里，不会上传到任何地方。</p>
     <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
+    <p class="small" style="margin:0">TMDB API Key（可选，用于演员头像）</p>
+    <input id="tmdbInput" type="text" placeholder="32 位 API Key" autocomplete="off">
     <div class="actions"><button id="saveLink" class="pill">保存并加载</button><button id="cancelSetup" class="pill ghost">取消</button></div>
     <button id="clearCache" class="pill ghost small">清除影片信息缓存</button>
   </div>
 </div>
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>

@@ -311,16 +311,16 @@ const I = {
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg>',
 };
-function metaRow(it, extra = '') {
+function metaRow(it, en = false) {
   const m = it.meta || {}, g = (m.genres || [])[0];
   const q = quality(it.files[0]);
   const parts = [];
   if (m.rating) parts.push(`<span>${I.star}${esc(m.rating)}</span>`);
   if (yearOf(it)) parts.push(`<span>${I.cal}${esc(yearOf(it))}</span>`);
   if (g) parts.push(`<span>${esc(g)}</span>`);
-  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} 集</span>`);
+  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} ${en ? 'episodes' : '集'}</span>`);
   if (q) parts.push(`<span class="tag">${q}</span>`);
-  return `<div class="metarow">${parts.join('<span class="dot"></span>')}${extra}</div>`;
+  return `<div class="metarow">${parts.join('<span class="dot"></span>')}</div>`;
 }
 function titleBlock(it, big) {
   const logo = logoOf(it);
@@ -393,38 +393,70 @@ function viewGenres(sel) {
   return `<div class="page"><h1>分类</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(gName(g))} · ${gcount.get(g)}</button>`).join('')}</div>
     <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.rating ? '★ ' + it.meta.rating : ''].filter(Boolean).join(' · ') })).join('')}</div></div>`;
 }
+// ---------- TMDB credits (cast photos) ----------
+const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
+const creditsPending = new Set();
+function creditsOf(it) {
+  const id = it.meta?.id; if (!id) return null;
+  const c = LS.get('tmdbc:' + id);
+  if (c) return c;
+  const key = LS.get('tmdb:key');
+  if (key && !creditsPending.has(id)) {
+    creditsPending.add(id);
+    (async () => {
+      try {
+        const f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json();
+        const hit = (f.movie_results || [])[0] || (f.tv_results || [])[0];
+        if (!hit) { LS.set('tmdbc:' + id, { cast: [], crew: [] }); return; }
+        const tv = !(f.movie_results || [])[0];
+        const cr = await (await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`)).json();
+        const cast = (cr.cast || []).slice(0, 20).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
+        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).slice(0, 3).map(p => ({ n: p.name, r: 'Director', p: p.profile_path }));
+        LS.set('tmdbc:' + id, { cast, crew, t: Date.now() });
+        if (location.hash.includes(enc(it.key))) render();
+      } catch (e) { console.warn('tmdb', e); }
+    })();
+  }
+  return null;
+}
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
-  if (!it) return '<div class="page"><p class="empty">没找到这部片。</p></div>';
+  if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
   const m = it.meta || {}, f = it.files[0], pr = progressOf(it), isS = it.parsed.kind === 'series';
   setAmbient(bgOf(it));
   const resume = pr && pr.t > 30 && pr.t < pr.d - 60;
   const infos = [
-    ['类型', isS ? '剧集' : '电影'], ['上映', m.year || it.parsed.year], ['片长', fmtRuntime(m.runtime)], ['类型', (m.genres || []).map(gName).join('、')],
-    ['评分', m.rating ? `${m.rating} / 10` : ''], ['导演', (m.director || []).join(', ')], ['主演', (m.cast || []).slice(0, 4).join(', ')], ['国家', m.country],
+    ['Type', isS ? 'Series' : 'Film'], ['Released', m.year || it.parsed.year], ['Runtime', fmtRuntime(m.runtime)], ['Genres', (m.genres || []).join(', ')],
+    ['Rating', m.rating ? `${m.rating} / 10` : ''], ['Director', (m.director || []).join(', ')], ['Cast', (m.cast || []).slice(0, 4).join(', ')], ['Country', m.country],
   ].filter(x => x[1]);
-  infos[0][0] = '形式';
   const epName = (s, e) => (m.videos || []).find(x => x.s === s && x.e === e) || {};
-  const people = [...(m.director || []).map(n => [n, '导演']), ...(m.cast || []).map(n => [n, '演员'])];
+  const cr = creditsOf(it);
+  const people = cr && (cr.cast.length || cr.crew.length)
+    ? [...cr.crew, ...cr.cast]
+    : [...(m.director || []).map(n => ({ n, r: 'Director' })), ...(m.cast || []).map(n => ({ n, r: '' }))];
   const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   const similar = state.items.filter(x => x !== it && (x.meta?.genres || []).some(g => (m.genres || []).includes(g)))
     .map(x => ({ x, s: (x.meta.genres || []).filter(g => (m.genres || []).includes(g)).length })).sort((a, b) => b.s - a.s).slice(0, 15).map(o => o.x);
+  const face = p => p.p
+    ? `<div class="face" style="background:#222 url('${TMDB_IMG}${esc(p.p)}') center/cover"></div>`
+    : `<div class="face" style="background:linear-gradient(160deg,hsl(${hue(p.n)} 35% 32%),hsl(${(hue(p.n) + 40) % 360} 30% 16%))">${esc(p.n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div>`;
+  const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
   return `<div class="detail"><div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
-    <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it)}
-      <p class="desc">${esc(m.desc || '没找到这部片的资料，可以点下面的“修正匹配”。')}</p>
+    <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
+      <p class="desc">${esc(m.desc || 'No details found for this title. Use the edit button below to fix the match.')}</p>
       <div class="hbtns">
-        ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? '继续 S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
-              : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? '继续 ' + fmtTime(pr.t) : 'PLAY'}</button>`}
-        <span class="duo">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="从头播放">${I.restart}</button><i></i>` : ''}
-          <a href="${esc(f.web)}" target="_blank" rel="noopener" title="在 OneDrive 打开">${I.od}</a><i></i>
-          <button data-fix="${esc(it.key)}" title="修正匹配">${I.fix}</button></span>
+        ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
+              : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
+        <span class="duo">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button><i></i>` : ''}
+          <a href="${esc(f.web)}" target="_blank" rel="noopener" title="Open in OneDrive">${I.od}</a><i></i>
+          <button data-fix="${esc(it.key)}" title="Fix match">${I.fix}</button></span>
       </div>
-      <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, f.subs.length ? '外挂字幕 ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : ''].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} 个文件 · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
+      <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
     <div class="infobox"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div></div>
-    ${isS ? `<section class="row"><h2>剧集列表</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · 看到 ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row"><h2>演职人员</h2><div class="cast">${people.map(([n, r]) => `<div class="person"><div class="face" style="background:linear-gradient(160deg,hsl(${hue(n)} 35% 32%),hsl(${(hue(n) + 40) % 360} 30% 16%))">${esc(n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div><div class="n">${esc(n)}</div><div class="r">${r}</div></div>`).join('')}</div></section>` : ''}
-    ${row('相似影片', similar)}
+    ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
+    ${people.length ? `<section class="row"><h2>Cast</h2><div class="cast">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
+    ${row('More like this', similar)}
     <div style="height:40px"></div></div>`;
 }
 
@@ -479,10 +511,11 @@ $('#searchBtn').onclick = openSearch;
 $('#q').oninput = renderSearch;
 
 // ---------- setup ----------
-function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#setup').hidden = false; }
+function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#tmdbInput').value = LS.get('tmdb:key') || ''; $('#setup').hidden = false; }
 $('#saveLink').onclick = () => {
   const v = $('#linkInput').value.trim();
   if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com|.*sharepoint\.com)/.test(v)) { alert('这看起来不是 OneDrive 分享链接'); return; }
+  const k = $('#tmdbInput').value.trim(); if (k) LS.set('tmdb:key', k); else LS.del('tmdb:key');
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; load(true);
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
@@ -507,14 +540,14 @@ document.addEventListener('click', e => {
   const fx = t.closest('[data-fix]');
   if (fx) {
     const it = state.items.find(x => x.key === fx.dataset.fix);
-    const v = prompt('输入 IMDb 编号（如 tt0274812），或正确的英文片名：', it.meta?.id || it.parsed.title);
+    const v = prompt('Enter an IMDb ID (e.g. tt0274812) or the correct English title:', it.meta?.id || it.parsed.title);
     if (!v) return;
     const ck = it.parsed.kind + ':' + keyOf(it.parsed);
     LS.del('meta:' + ck);
     const isId = /^tt\d+$/.test(v.trim());
     if (isId) LS.set('fix:' + ck, v.trim()); else LS.del('fix:' + ck);
     const p2 = isId ? it.parsed : { ...it.parsed, title: v.trim() };
-    findMeta(p2).then(m => { if (m) { LS.set('fix:' + ck, m.id); LS.set('meta:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? '已更新为 ' + m.name : '还是没找到', 3000); });
+    findMeta(p2).then(m => { if (m) { LS.set('fix:' + ck, m.id); LS.set('meta:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? 'Matched: ' + m.name : 'Still no match', 3000); });
   }
 });
 $('#pclose').onclick = closePlayer;
@@ -527,9 +560,11 @@ document.addEventListener('keydown', e => {
 });
 
 // link via URL hash (#link=...) for quick setup on a new device
-if (location.hash.startsWith('#link=')) {
+if (/^#(link|tmdb)=/.test(location.hash)) {
   const h = new URLSearchParams(location.hash.slice(1));
-  LS.set('od:link', h.get('link')); LS.del('od:files'); history.replaceState(null, '', location.pathname);
+  if (h.get('link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); }
+  if (h.get('tmdb')) LS.set('tmdb:key', h.get('tmdb'));
+  history.replaceState(null, '', location.pathname);
 }
 render();
 load();
