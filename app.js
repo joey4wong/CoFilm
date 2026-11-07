@@ -754,6 +754,29 @@ function closeSearch() { $('#search').hidden = true; document.body.style.overflo
 $('#searchBtn').onclick = openSearch;
 $('#q').oninput = renderSearch;
 
+
+// ---------- access code: decrypts config.enc.json (OneDrive link + TMDB key) ----------
+async function unlockWithCode(raw) {
+  let code = String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (/^[a-z0-9]{8}$/.test(code)) code = code.slice(0, 4) + '-' + code.slice(4);
+  const f = await (await fetch('config.enc.json?t=' + Date.now(), { cache: 'no-store' })).json();
+  const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b(f.salt), iterations: f.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(f.iv) }, key, b(f.data));
+  const cfg = JSON.parse(new TextDecoder().decode(plain));
+  LS.set('od:link', cfg.link); if (cfg.tmdb) LS.set('tmdb:key', cfg.tmdb); LS.del('od:files');
+  ratingsKey = null;
+  return true;
+}
+async function tryUnlock(code) {
+  $('#codeMsg').textContent = 'Checking…';
+  try { await unlockWithCode(code); $('#codeMsg').textContent = ''; $('#setup').hidden = true; load(true); loadRatings(); }
+  catch (e) { console.warn(e); $('#codeMsg').textContent = 'That code did not work. Please check it and try again.'; }
+}
+$('#unlockBtn').onclick = () => tryUnlock($('#codeInput').value);
+$('#codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock($('#codeInput').value); });
+
 // ---------- setup ----------
 function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#tmdbInput').value = LS.get('tmdb:key') || ''; $('#setup').hidden = false; }
 $('#saveLink').onclick = () => {
@@ -804,6 +827,11 @@ document.addEventListener('keydown', e => {
 });
 
 // link via URL hash (#link=...) for quick setup on a new device
+const urlCode = new URLSearchParams(location.search).get('code') || new URLSearchParams(location.hash.slice(1)).get('code');
+if (urlCode) {
+  history.replaceState(null, '', location.pathname);
+  if (!LS.get('od:link')) setTimeout(() => { openSetup(); $('#codeInput').value = urlCode; tryUnlock(urlCode); }, 0);
+}
 if (/^#(link|tmdb)=/.test(location.hash)) {
   const h = new URLSearchParams(location.hash.slice(1));
   if (h.get('link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); }

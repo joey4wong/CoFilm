@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 <script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
 </head>
 <body>
@@ -49,15 +49,20 @@
 
 <div id="setup" class="overlay" hidden>
   <div class="box">
-    <h2>Settings</h2>
-    <p>Paste the view-only OneDrive share link of your movie folder. It is saved only in this browser on this device and is never uploaded anywhere.</p>
-    <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
-    <p class="small" style="margin:0">TMDB API key (optional: better matching, cast photos)</p>
-    <input id="tmdbInput" type="text" placeholder="32-character API key" autocomplete="off">
-    <div class="actions"><button id="saveLink" class="pill">Save &amp; load</button><button id="cancelSetup" class="pill ghost">Cancel</button></div>
-    <button id="clearCache" class="pill ghost small">Clear metadata cache</button>
+    <h2>Welcome to CoFilm</h2>
+    <p>Enter your access code to start watching.</p>
+    <input id="codeInput" type="text" placeholder="xxxx-xxxx" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-size:20px;letter-spacing:.12em;text-align:center">
+    <div class="actions"><button id="unlockBtn" class="pill">Unlock</button><button id="cancelSetup" class="pill ghost">Cancel</button></div>
+    <p id="codeMsg" class="small" style="min-height:1.2em;color:#ff8a80"></p>
+    <details class="adv"><summary class="small">Advanced: set up with a OneDrive link</summary>
+      <p class="small">Paste the view-only OneDrive share link of the movie folder. It is saved only in this browser.</p>
+      <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
+      <p class="small" style="margin:0">TMDB API key (optional)</p>
+      <input id="tmdbInput" type="text" placeholder="32-character API key" autocomplete="off">
+      <div class="actions"><button id="saveLink" class="pill small">Save &amp; load</button><button id="clearCache" class="pill ghost small">Clear metadata cache</button></div>
+    </details>
   </div>
 </div>
-<script type="module" src="app.js?v=20"></script>
+<script type="module" src="app.js?v=21"></script>
 </body>
 </html>

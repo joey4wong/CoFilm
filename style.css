@@ -171,3 +171,7 @@ main{min-height:100vh}
 .rate.db i{background:#00b51d;color:#fff}
 .rate span{font-weight:600}
 .rate small{white-space:nowrap;color:rgba(255,255,255,.65);font-size:12.5px}
+
+.adv{margin-top:14px;color:var(--muted)}
+.adv summary{cursor:pointer;margin-bottom:8px}
+#codeMsg{margin:4px 0 0}
