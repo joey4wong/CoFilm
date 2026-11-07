@@ -287,6 +287,72 @@ async function subBlob(s) {
   return { url: URL.createObjectURL(new Blob([txt], { type: 'text/plain' })), fmt: 'srt' };
 }
 
+
+// ---------- OneDrive read-ahead source ----------
+// The player's demuxer issues many small range reads. Each OneDrive request costs ~200-300 ms of latency,
+// so we fetch big aligned blocks (in parallel), keep them in an LRU cache and prefetch ahead of playback.
+class ODSource {
+  constructor(file, refresh) {
+    this.f = file; this.url = file.url; this.size = file.size; this.refresh = refresh;
+    this.BS = 4 * 1024 * 1024; this.MAX = 56; this.AHEAD = 8; this.PAR = 4;
+    this.cache = new Map(); this.inflight = 0; this.queue = []; this.last = -1;
+  }
+  async getSize() { return this.size; }
+  getKey() { return 'od:' + this.f.id; }
+  seek(o) { return o; } getPosition() { return 0; } close() { this.cache.clear(); this.closed = true; }
+  _slot(fn) {
+    return new Promise((res, rej) => {
+      const run = () => { this.inflight++; fn().then(res, rej).finally(() => { this.inflight--; const n = this.queue.shift(); if (n) n(); }); };
+      this.inflight < this.PAR ? run() : this.queue.push(run);
+    });
+  }
+  async _fetch(i, retry = 0) {
+    const start = i * this.BS, end = Math.min(this.size, start + this.BS) - 1;
+    try {
+      const r = await fetch(this.url, { headers: { Range: `bytes=${start}-${end}` } });
+      if (r.status === 401 || r.status === 403 || r.status === 404) throw Object.assign(new Error('expired'), { expired: true });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.arrayBuffer();
+    } catch (e) {
+      if (retry >= 3 || this.closed) throw e;
+      if (e.expired && this.refresh) { const u = await this.refresh(); if (u) this.url = u; }
+      else await new Promise(r => setTimeout(r, 400 * (retry + 1)));
+      return this._fetch(i, retry + 1);
+    }
+  }
+  _block(i, prio) {
+    let p = this.cache.get(i);
+    if (p) { this.cache.delete(i); this.cache.set(i, p); return p; }
+    p = prio ? this._fetch(i) : this._slot(() => this._fetch(i));
+    p.catch(() => this.cache.delete(i));
+    this.cache.set(i, p);
+    while (this.cache.size > this.MAX) this.cache.delete(this.cache.keys().next().value);
+    return p;
+  }
+  async read(offset, length) {
+    if (offset >= this.size) return new ArrayBuffer(0);
+    const endB = Math.min(this.size, offset + length);
+    const first = Math.floor(offset / this.BS), last = Math.floor((endB - 1) / this.BS);
+    const parts = [];
+    for (let i = first; i <= last; i++) parts.push(this._block(i, true));
+    // prefetch ahead when reading forward (playback), not for one-off probes at the end of the file
+    if (this.last >= 0 && first >= this.last && first - this.last <= 2) {
+      const maxB = Math.floor((this.size - 1) / this.BS);
+      for (let i = last + 1; i <= Math.min(maxB, last + this.AHEAD); i++) if (!this.cache.has(i)) this._block(i, false);
+    }
+    this.last = last;
+    const bufs = await Promise.all(parts);
+    const out = new Uint8Array(endB - offset);
+    let pos = 0;
+    for (let k = 0; k < bufs.length; k++) {
+      const b = new Uint8Array(bufs[k]), bStart = (first + k) * this.BS;
+      const s = Math.max(offset, bStart) - bStart, e = Math.min(endB, bStart + b.length) - bStart;
+      out.set(b.subarray(s, e), pos); pos += e - s;
+    }
+    return out.buffer;
+  }
+}
+
 // ---------- player ----------
 let player = null, saveTimer = 0, current = null;
 async function play(fileId, restart) {
@@ -299,6 +365,7 @@ async function play(fileId, restart) {
   $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
   $('#player').hidden = false; document.body.style.overflow = 'hidden';
   const wrap = $('#pwrap'); wrap.innerHTML = '';
+  await customElements.whenDefined('movi-player');
   player = document.createElement('movi-player');
   player.setAttribute('controls', ''); player.setAttribute('crossorigin', 'anonymous');
   player.setAttribute('fallback', 'native'); player.setAttribute('persist', 'volume speed subtitlelang audiolang');
@@ -313,8 +380,9 @@ async function play(fileId, restart) {
       player.appendChild(tr);
     } catch (e) { console.warn('subtitle load failed', s.name, e); }
   }
-  player.setAttribute('src', f.url);
+  const fileRef = f;
   wrap.appendChild(player);
+  player.sourceAdapter = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; });
   const saved = LS.get('pos:' + f.id);
   const startAt = !restart && saved && saved.t > 30 && saved.t < saved.d - 60 ? saved.t : 0;
   let seeked = false;
