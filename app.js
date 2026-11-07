@@ -281,10 +281,17 @@ function assToSrt(txt) {
 async function subBlob(s) {
   const buf = await (await fetch(s.url)).arrayBuffer();
   let txt = new TextDecoder('utf-8').decode(buf);
-  if (txt.includes('\uFFFD')) { try { txt = new TextDecoder('gb18030').decode(buf); } catch {} }
+  if (txt.includes('\uFFFD')) {                       // not UTF-8: try UTF-16 (BOM) or Chinese GBK/GB18030
+    const b = new Uint8Array(buf);
+    try { txt = new TextDecoder(b[0] === 0xFF && b[1] === 0xFE ? 'utf-16le' : b[0] === 0xFE && b[1] === 0xFF ? 'utf-16be' : 'gb18030').decode(buf); } catch {}
+  }
+  txt = txt.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');   // strip BOM, Windows line endings break the parser
   if (/\.(ass|ssa)$/i.test(s.name)) txt = assToSrt(txt);
-  if (/\.vtt$/i.test(s.name)) return { url: URL.createObjectURL(new Blob([txt], { type: 'text/vtt' })), fmt: 'vtt' };
-  return { url: URL.createObjectURL(new Blob([txt], { type: 'text/plain' })), fmt: 'srt' };
+  if (!/\.vtt$/i.test(s.name)) txt = txt.replace(/(\d\d:\d\d:\d\d)\.(\d{3})/g, '$1,$2').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  const cjk = /[\u4e00-\u9fff]/.test(txt), latin = /[A-Za-z]{3,}.*\n/.test(txt.replace(/^\d+\n[\d:,.\- >]+\n/gm, ''));
+  const lang = cjk && latin ? { code: 'zh', label: 'Chinese & English' } : cjk ? { code: 'zh', label: 'Chinese' } : { code: 'en', label: 'English' };
+  if (/\.vtt$/i.test(s.name)) return { url: URL.createObjectURL(new Blob([txt], { type: 'text/vtt' })), fmt: 'vtt', lang };
+  return { url: URL.createObjectURL(new Blob([txt], { type: 'text/plain' })), fmt: 'srt', lang };
 }
 
 
@@ -378,7 +385,7 @@ async function play(fileId, restart) {
     try {
       const b = await subBlob(s);
       const tr = document.createElement('track');
-      tr.kind = 'subtitles'; tr.label = /\.(ass|ssa)$/i.test(s.name) ? 'Subtitles (ASS)' : 'Subtitles'; tr.srclang = 'und'; tr.src = b.url;
+      tr.kind = 'subtitles'; tr.label = b.lang.label; tr.srclang = b.lang.code; tr.src = b.url;
       if (b.fmt === 'srt') tr.dataset.format = 'srt';
       if (s === f.subs[0]) tr.default = true;
       player.appendChild(tr);
