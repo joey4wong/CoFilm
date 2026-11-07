@@ -448,6 +448,7 @@ function progressOf(it) {
   return best;
 }
 const I = {
+  yt: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="#ff0033" stroke="none"/><path d="M10 9v6l5-3z" fill="#fff" stroke="none"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg>',
   star: '<svg class="star" viewBox="0 0 24 24"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></svg>',
   cal: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
@@ -635,6 +636,31 @@ function ratingsHtml(it) {
   return `<div class="rates">${a('imdb', ICON.imdb, 'IMDb', imdbV ? imdbV : '', imdbU)}${a('rt', isNaN(rtPct) || rtPct >= 60 ? ICON.fresh : ICON.rotten, 'Rotten Tomatoes (critics)', r.rt?.v || '', rtU)}${a('db', ICON.douban, 'Douban', r.db?.v || '', dbU)}</div>`;
 }
 
+
+// ---------- Trailer (TMDB videos -> YouTube) ----------
+const trailerPending = new Set();
+function trailerOf(it) {
+  const m = it.meta; if (!m?.id) return null;
+  const ck = 'tmdbt:' + m.id, c = LS.get(ck);
+  if (c && Date.now() - (c.t || 0) < 7 * 864e5) return c.key ? c : { none: true };
+  const key = LS.get('tmdb:key');
+  if (key && m.tmdbId && !trailerPending.has(ck)) {
+    trailerPending.add(ck);
+    (async () => {
+      let pick = null;
+      try {
+        const j = await (await fetch(`https://api.themoviedb.org/3/${it.parsed.kind === 'series' ? 'tv' : 'movie'}/${m.tmdbId}/videos?api_key=${key}`)).json();
+        const yt = (j.results || []).filter(v => v.site === 'YouTube');
+        const rank = v => (v.type === 'Trailer' ? 2 : v.type === 'Teaser' ? 1 : 0) * 10 + (v.official ? 5 : 0) + (v.iso_639_1 === 'en' ? 3 : 0);
+        pick = yt.filter(v => v.type === 'Trailer' || v.type === 'Teaser').sort((a, b) => rank(b) - rank(a) || String(b.published_at).localeCompare(String(a.published_at)))[0] || null;
+      } catch (e) { console.warn('trailer', e); return; }
+      LS.set(ck, { key: pick?.key || null, t: Date.now() });
+      if (location.hash.includes(enc(it.key))) render();
+    })();
+  }
+  return null;
+}
+
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
@@ -664,6 +690,7 @@ function viewDetail(key) {
         ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
               : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
         ${resume && !isS ? `<span class="duo lg"><button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button></span>` : ''}
+        ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="pill ghost trailer" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener">${I.yt}TRAILER</a>` : ''; })()}
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
@@ -837,7 +864,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 
 // ---------- events ----------
 document.addEventListener('click', e => {
