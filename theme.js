@@ -9,7 +9,7 @@
     const changed = root.dataset.theme !== theme;
     root.dataset.theme = theme;
     root.style.colorScheme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f5f6f8' : '#0a0a0a');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#e9eae8' : '#0a0a0a');
     clearTimeout(boundaryTimer);
     const boundary = new Date(now);
     if (hour < 6) boundary.setHours(6, 0, 0, 0);

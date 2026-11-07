@@ -284,7 +284,7 @@ body{overflow-x:clip}
 
 /* Themes share all geometry and lens optics. Only paint and text colors differ. */
 :root{color-scheme:dark}
-:root[data-theme="light"]{color-scheme:light;--bg:#f5f6f8;--text:#171b24;--muted:rgba(23,27,36,.72);--dim:rgba(23,27,36,.6);--glass:rgba(255,255,255,.08);--line:rgba(23,27,36,.12)}
+:root[data-theme="light"]{color-scheme:light;--bg:#e9eae8;--surface:#f3f4f1;--text:#2b2e32;--muted:#555a60;--dim:#60656b;--glass:rgba(255,255,255,.08);--line:rgba(23,27,36,.12)}
 [data-theme="light"] #ambient{visibility:hidden}
 [data-theme="light"] .lg{background:rgba(255,255,255,.08)!important;box-shadow:inset 0 0 0 .5px rgba(23,27,36,.12),inset 0 1px 0 rgba(255,255,255,.35),0 10px 34px rgba(23,27,36,.14),0 1px 3px rgba(23,27,36,.12)}
 [data-theme="light"] #nav a{color:#1b2330;text-shadow:0 1px 3px rgba(255,255,255,.85)}
@@ -298,22 +298,22 @@ body{overflow-x:clip}
 [data-theme="light"] :is(.hero .desc,.dleft .desc){color:rgba(255,255,255,.96);text-shadow:0 1px 3px rgba(0,0,0,.8)}
 [data-theme="light"] .hero-link:focus-visible{outline-color:#fff}
 [data-theme="light"] .cast-next:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
-[data-theme="light"] .card .pos{background:linear-gradient(135deg,#e0e3e9,#cbd1db);box-shadow:0 5px 16px rgba(23,27,36,.14);outline-color:rgba(23,27,36,.08)}
+[data-theme="light"] .card .pos{background:var(--surface);box-shadow:0 4px 14px rgba(35,39,36,.12);outline-color:rgba(35,39,36,.09)}
 [data-theme="light"] .card:hover .pos{box-shadow:0 12px 28px rgba(23,27,36,.2)}
-[data-theme="light"] .chips button{background:rgba(255,255,255,.65);border-color:rgba(23,27,36,.12);color:var(--muted)}
+[data-theme="light"] .chips button{background:var(--surface);border-color:rgba(23,27,36,.12);color:var(--muted)}
 [data-theme="light"] .chips button.on{background:#1b202b;color:#fff}
-[data-theme="light"] .ep{background:rgba(255,255,255,.55);border-color:rgba(23,27,36,.08)}
-[data-theme="light"] .ep:hover{background:rgba(23,27,36,.04)}
-[data-theme="light"] .overlay{background:rgba(245,246,248,.93)}
-[data-theme="light"] .searchbox input{background:rgba(255,255,255,.85);border-color:rgba(23,27,36,.15);color:var(--text)}
+[data-theme="light"] .ep{background:var(--surface);border-color:rgba(23,27,36,.08)}
+[data-theme="light"] .ep:hover{background:#f8f8f5}
+[data-theme="light"] .overlay{background:rgba(233,234,232,.94)}
+[data-theme="light"] .searchbox input{background:var(--surface);border-color:rgba(23,27,36,.15);color:var(--text)}
 [data-theme="light"] .searchbox input:focus{border-color:rgba(23,27,36,.45)}
 [data-theme="light"] .searchbox input::placeholder,[data-theme="light"] .box input::placeholder{color:var(--dim)}
-[data-theme="light"] .box{background:rgba(255,255,255,.95);border-color:rgba(23,27,36,.1);box-shadow:0 15px 50px rgba(23,27,36,.12)}
-[data-theme="light"] .box input{background:#f5f6f8;border-color:rgba(23,27,36,.15);color:var(--text)}
+[data-theme="light"] .box{background:var(--surface);border-color:rgba(23,27,36,.1);box-shadow:0 15px 50px rgba(23,27,36,.12)}
+[data-theme="light"] .box input{background:var(--bg);border-color:rgba(23,27,36,.15);color:var(--text)}
 [data-theme="light"] .box .pill{background:#1b202b;color:#fff;box-shadow:0 6px 20px rgba(23,27,36,.14)}
 [data-theme="light"] .box .pill.ghost{background:rgba(23,27,36,.06);color:var(--text);border-color:rgba(23,27,36,.12)}
 [data-theme="light"] #codeMsg{color:#b72626!important}
-[data-theme="light"] #toast{background:rgba(255,255,255,.92);border-color:rgba(23,27,36,.12)}
+[data-theme="light"] #toast{background:rgba(243,244,241,.96);border-color:rgba(23,27,36,.12)}
 [data-theme="light"] .rate svg.ic{stroke:none}
 /* Playback remains cinema-dark in either theme. */
 #player{color:#f3f3f3;color-scheme:dark}
@@ -354,7 +354,7 @@ body{overflow-x:clip}
 /* Missing portraits: a neutral silhouette, never initials. Paint only across themes. */
 .person .face.face-placeholder{background:#272c34;color:#79828f;overflow:hidden;box-shadow:none;outline:0}
 .person .face-placeholder svg{width:62%;height:62%;flex:none;fill:currentColor}
-[data-theme="light"] .person .face.face-placeholder{background:#e2e5e9;color:#a0a8b3}
+[data-theme="light"] .person .face.face-placeholder{background:#dde0da;color:#919a93}
 
 /* Buttons overlay real artwork, not a reserved gutter. Poster links stay separate. */
 .browse-shell .scroller > .card,.recommend-shell .scroller > .card{width:var(--rail-card-width)}
