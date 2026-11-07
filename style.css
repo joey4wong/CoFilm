@@ -145,7 +145,7 @@ main{min-height:100vh}
   -webkit-backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);
   box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2);
   transition:transform .5s cubic-bezier(.34,1.56,.64,1)}
-html.chromium .lg{backdrop-filter:url(#lg-lens) blur(1.5px) saturate(1.7) brightness(1.04)}
+#nav.lg{-webkit-backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04)}
 .lg::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
   background:linear-gradient(140deg,rgba(255,255,255,.7) 0%,rgba(255,255,255,.18) 10%,rgba(255,255,255,0) 24%,rgba(255,255,255,0) 76%,rgba(255,255,255,.14) 90%,rgba(255,255,255,.45) 100%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}

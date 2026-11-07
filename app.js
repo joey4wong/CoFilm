@@ -529,6 +529,66 @@ function viewDetail(key) {
     <div style="height:40px"></div></div>`;
 }
 
+
+// ---------- Liquid Glass: real refraction via per-element lens displacement map (Chromium) ----------
+const GLASS_ON = document.documentElement.classList.contains('chromium');
+const lensCache = new Map();
+function lensMap(W, H, R, bezel) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d'), img = ctx.createImageData(W, H), d8 = img.data;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const px = x + .5, py = y + .5;
+    const cx = Math.min(Math.max(px, R), W - R), cy = Math.min(Math.max(py, R), H - R);
+    const dx = px - cx, dy = py - cy, dist = Math.hypot(dx, dy);
+    let r = 128, g = 128;
+    if (dist > 0) {
+      const d = R - dist;                       // distance from the rounded edge, inward
+      if (d >= 0 && d < bezel) {
+        const t = 1 - d / bezel;                // 1 at the rim, 0 at the end of the bevel
+        const mag = 1 - Math.sqrt(1 - t * t);   // circular bevel profile: strongest right at the rim
+        r = 128 + (-dx / dist) * mag * 127;
+        g = 128 + (-dy / dist) * mag * 127;
+      }
+    }
+    const i = (y * W + x) * 4; d8[i] = r; d8[i + 1] = g; d8[i + 2] = 128; d8[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+function glassFilter(W, H, R, bezel, S) {
+  const id = `lg-${W}x${H}-${R}`;
+  if (lensCache.has(id)) return id;
+  let holder = document.getElementById('lgdefs');
+  if (!holder) { holder = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); holder.id = 'lgdefs'; holder.setAttribute('width', '0'); holder.setAttribute('height', '0'); holder.style.position = 'absolute'; document.body.appendChild(holder); }
+  const map = lensMap(W, H, R, bezel);
+  const ch = (k, sc, res) => `<feDisplacementMap in="SourceGraphic" in2="map" scale="${sc}" xChannelSelector="R" yChannelSelector="G" result="d${res}"/>
+    <feColorMatrix in="d${res}" type="matrix" values="${k}" result="${res}"/>`;
+  holder.insertAdjacentHTML('beforeend', `<filter id="${id}" x="0" y="0" width="${W}" height="${H}" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feImage href="${map}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" result="map"/>
+    ${ch('1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0', S, 'r')}
+    ${ch('0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0', S * .93, 'g')}
+    ${ch('0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0', S * .86, 'b')}
+    <feComposite in="r" in2="g" operator="arithmetic" k2="1" k3="1" result="rg"/>
+    <feComposite in="rg" in2="b" operator="arithmetic" k2="1" k3="1"/>
+  </filter>`);
+  lensCache.set(id, 1);
+  return id;
+}
+function applyGlass() {
+  if (!GLASS_ON) return;
+  document.querySelectorAll('.lg').forEach(el => {
+    const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
+    if (!W || !H) return;
+    const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
+    const bezel = Math.max(10, Math.min(R, Math.min(W, H) * .32, 30));
+    const S = Math.round(bezel * 2.4);
+    const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
+    el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
+  });
+}
+let glassT = 0;
+window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
+
 // ---------- router ----------
 function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
@@ -556,6 +616,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
+  requestAnimationFrame(applyGlass);
 }
 function showSlide(i) {
   if (!hero.list.length) return;
