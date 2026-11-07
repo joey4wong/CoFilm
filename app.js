@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=83';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=84';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -339,8 +339,12 @@ async function subBlob(s) {
 // The player's demuxer issues many small range reads. Each OneDrive request costs ~200-300 ms of latency,
 // so we fetch big aligned blocks (in parallel), keep them in an LRU cache and prefetch ahead of playback.
 class ODSource {
-  constructor(file, refresh) {
+  constructor(file, refresh, { resumeAt = 0 } = {}) {
     this.f = file; this.url = file.url; this.size = file.size; this.refresh = refresh;
+    // Resuming: the engine first reads the head of the file to identify the streams, then jumps to the saved
+    // spot. Read-ahead from that head is wasted (measured ~34 MB on a 4K film), so hold it until playback
+    // reaches the middle of the file or starts.
+    this.holdAhead = resumeAt > 0;
     this.BS = 4 * 1024 * 1024; this.MAX = 56; this.AHEAD = 8; this.PAR = 4;
     this.cache = new Map(); this.inflight = 0; this.queue = []; this.last = -1;
   }
@@ -392,14 +396,24 @@ class ODSource {
     if (offset >= this.size) return new ArrayBuffer(0);
     const endB = Math.min(this.size, offset + length);
     const first = Math.floor(offset / this.BS), last = Math.floor((endB - 1) / this.BS);
-    const parts = [];
-    for (let i = first; i <= last; i++) parts.push(this._block(i, true));
+    const edge = 64 * 1024 * 1024;
+    if (this.holdAhead && offset > edge && endB < this.size - edge) this.holdAhead = false;
     // prefetch ahead when reading forward (playback), not for one-off probes at the end of the file
-    if (this.last >= 0 && first >= this.last && first - this.last <= 2) {
+    if (!this.holdAhead && this.last >= 0 && first >= this.last && first - this.last <= 2) {
       const maxB = Math.floor((this.size - 1) / this.BS);
       for (let i = last + 1; i <= Math.min(maxB, last + this.AHEAD); i++) if (!this.cache.has(i)) this._block(i, false);
     }
     this.last = last;
+    return this.readShared(offset, length);
+  }
+  // Same block cache as the engine, without moving its read-ahead position: for side readers such as the
+  // embedded-subtitle index, so the same bytes are never downloaded twice.
+  async readShared(offset, length) {
+    if (offset >= this.size) return new ArrayBuffer(0);
+    const endB = Math.min(this.size, offset + length);
+    const first = Math.floor(offset / this.BS), last = Math.floor((endB - 1) / this.BS);
+    const parts = [];
+    for (let i = first; i <= last; i++) parts.push(this._block(i, true));
     const bufs = await Promise.all(parts);
     const out = new Uint8Array(endB - offset);
     let pos = 0;
@@ -424,7 +438,7 @@ async function readMp4Subtitles(src) {
   let off = 0, moov = null;
   while (off < size) {
     const b = await rd(off, 16); let sz = b.getUint32(0); const ty = td.decode(new Uint8Array(b.buffer, 4, 4)); if (sz === 1) sz = Number(b.getBigUint64(8)); if (sz === 0) sz = size - off;
-    if (ty === 'moov') { moov = await rd(off, Math.min(sz, 64 * 1024 * 1024)); break; }
+    if (ty === 'moov') { moov = new DataView(await src.readShared(off, Math.min(sz, 64 * 1024 * 1024))); break; }   // shared with the engine
     if (sz < 8) return [];
     off += sz;
   }
@@ -560,61 +574,97 @@ function loadPlayerLib() {
   return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js').catch(e => { playerLib = null; throw e; });
 }
 let player = null, saveTimer = 0, current = null, embTok = null;
+// Fetch the ~11 MB engine when a viewer shows intent (opens a film, touches PLAY), never at site startup.
+function warmPlayer() {
+  if (navigator.connection?.saveData) return;
+  loadPlayerLib().catch(() => {});
+}
+function savePosition() {
+  if (player && current && player.duration && player.currentTime > 5) LS.set('pos:' + current.f.id, { t: player.currentTime, d: player.duration, at: Date.now() });
+}
+function nextEpisode(it, f) {
+  if (it.parsed.kind !== 'series') return null;
+  const i = it.files.indexOf(f);
+  return i >= 0 ? it.files[i + 1] || null : null;
+}
 async function play(fileId, restart) {
   let it, f;
   for (const x of state.items) for (const y of x.files) if (y.id === fileId) { it = x; f = y; }
   if (!f) return;
+  const lib = loadPlayerLib();                                   // download the engine while links refresh
+  $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
+  const wrap = $('#pwrap');
+  wrap.innerHTML = `<div class="ploading"${it.meta?.background ? ` style="background-image:url('${esc(it.meta.background)}')"` : ''}><span class="pspinner" aria-label="Loading"></span></div>`;
+  $('#player').hidden = false; document.body.style.overflow = 'hidden';
+  if (!history.state?.player) history.pushState({ player: true }, '', location.href);  // Back closes the player
   f = await freshFile(f);
   current = { it, f };
-  $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
-  $('#player').hidden = false; document.body.style.overflow = 'hidden';
-  const wrap = $('#pwrap'); wrap.innerHTML = '';
-  await loadPlayerLib();
+  // External subtitles download in parallel instead of one after another.
+  const subs = Promise.all(f.subs.map(s => subBlob(s).then(b => ({ s, b }), e => { console.warn('subtitle load failed', s.name, e); return null; })));
+  await lib;
   await customElements.whenDefined('movi-player');
+  if (current?.f !== f) return;                                  // closed or switched while loading
+  const saved = LS.get('pos:' + f.id);
+  const startAt = !restart && saved && saved.t > 30 && saved.t < saved.d - 60 ? saved.t : 0;
   player = document.createElement('movi-player');
   player.setAttribute('controls', ''); player.setAttribute('crossorigin', 'anonymous');
   player.setAttribute('fallback', 'native'); player.setAttribute('persist', 'volume speed subtitlelang audiolang');
+  player.setAttribute('title', $('#ptitle').textContent);         // lock screen / Now Playing name
   if (it.meta?.background) player.setAttribute('poster', it.meta.background);
-  for (const s of f.subs) {
-    try {
-      const b = await subBlob(s);
-      const tr = document.createElement('track');
-      tr.kind = 'subtitles'; tr.label = b.lang.label; tr.srclang = b.lang.code; tr.src = b.url;
-      if (b.fmt === 'srt') tr.dataset.format = 'srt';
-      if (s === f.subs[0]) tr.default = true;
-      player.appendChild(tr);
-    } catch (e) { console.warn('subtitle load failed', s.name, e); }
+  if (startAt) player.setAttribute('startat', startAt.toFixed(2)); // open at the saved spot, not at 0 then seek
+  for (const x of await subs) {
+    if (!x) continue;
+    const tr = document.createElement('track');
+    tr.kind = 'subtitles'; tr.label = x.b.lang.label; tr.srclang = x.b.lang.code; tr.src = x.b.url;
+    if (x.b.fmt === 'srt') tr.dataset.format = 'srt';
+    if (x.s === f.subs[0]) tr.default = true;
+    player.appendChild(tr);
   }
+  if (current?.f !== f) return;
   const fileRef = f;
-  wrap.appendChild(player);
-  const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; });
+  // Keep the artwork + spinner over the engine until the first frame plays (the canvas is black until then).
+  const veil = wrap.querySelector('.ploading');
+  const lift = () => { veil?.classList.add('done'); setTimeout(() => veil?.remove(), 400); };
+  player.addEventListener('playing', lift, { once: true });
+  player.addEventListener('error', lift, { once: true });
+  setTimeout(lift, 20000);                                       // never leave it covering the player
+  wrap.prepend(player);
+  const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; }, { resumeAt: startAt });
+  player.addEventListener('playing', () => { odSrc.holdAhead = false; }, { once: true });
   player.sourceAdapter = odSrc;
   if (embTok) embTok.stop?.();
-  const saved = LS.get('pos:' + f.id);
-  const startAt = !restart && saved && saved.t > 30 && saved.t < saved.d - 60 ? saved.t : 0;
   embTok = { dead: false, external: f.subs.length > 0, startAt };
   if (/\.(mp4|m4v|mov)$/i.test(f.name)) startEmbeddedSubs(player, odSrc, embTok);
   let seeked = false;
-  const trySeek = () => { if (!seeked && startAt && player.duration > 0) { seeked = true; player.currentTime = startAt; } };
+  // Safety net only: if the engine ignored startat, seek once.
+  const trySeek = () => { if (!seeked && startAt && player.duration > 0) { seeked = true; if (Math.abs(player.currentTime - startAt) > 5) player.currentTime = startAt; } };
   player.addEventListener('loadedmetadata', trySeek);
   player.addEventListener('durationchange', trySeek);
-  player.addEventListener('ended', () => { LS.del('pos:' + f.id); });
+  player.addEventListener('pause', savePosition);
+  player.addEventListener('ended', () => {
+    LS.del('pos:' + f.id);
+    const next = nextEpisode(it, f);
+    if (next) play(next.id, true);                               // series: continue with the next episode
+  });
   clearInterval(saveTimer);
-  saveTimer = setInterval(() => {
-    if (!player || !player.duration || player.paused) return;
-    if (player.currentTime > 5) LS.set('pos:' + f.id, { t: player.currentTime, d: player.duration, at: Date.now() });
-  }, 5000);
-  setTimeout(() => { trySeek(); player.play?.().catch(() => {}); }, 300);
+  saveTimer = setInterval(() => { if (player && !player.paused) savePosition(); }, 5000);
+  setTimeout(() => { trySeek(); player?.play?.().catch(() => {}); }, 300);
 }
-function closePlayer() {
+function closePlayer(fromHistory) {
+  if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
   if (embTok) embTok.stop?.();
-  if (player && current && player.duration && player.currentTime > 5) LS.set('pos:' + current.f.id, { t: player.currentTime, d: player.duration, at: Date.now() });
+  savePosition();
   clearInterval(saveTimer);
   try { player?.pause(); } catch {}
   $('#pwrap').innerHTML = ''; player = null; current = null;
   $('#player').hidden = true; document.body.style.overflow = '';
   render();
 }
+window.addEventListener('popstate', () => { if (!$('#player').hidden) closePlayer(true); });
+// Phones may freeze or kill a backgrounded tab; keep the resume point current.
+document.addEventListener('visibilitychange', () => { if (document.hidden) savePosition(); });
+window.addEventListener('pagehide', savePosition);
+if (history.state?.player) history.replaceState(null, '', location.href); // reloaded mid-film: no stale entry
 
 
 // ---------- UI helpers ----------
@@ -1238,6 +1288,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
+  if (r.name === 'detail') setTimeout(() => { if (routeInfo().name === 'detail') warmPlayer(); }, 1200);
   requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); updateNavContrast(); });
 }
 function showSlide(i) {
@@ -1364,6 +1415,7 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- events ----------
+document.addEventListener('pointerdown', e => { if (e.target.closest?.('[data-play],[data-play-item]')) warmPlayer(); }, { passive: true });
 document.addEventListener('click', e => {
   const t = e.target;
   if (t.closest('[data-hero-controls]')) {
@@ -1403,7 +1455,7 @@ document.addEventListener('click', e => {
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
-$('#pclose').onclick = closePlayer;
+$('#pclose').onclick = () => closePlayer();
 document.addEventListener('keydown', e => {
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;

@@ -385,3 +385,13 @@ body{overflow-x:clip}
 }
 
 /* Let the browser keep vertical scrolling while we handle horizontal swipes on the hero. */
+
+/* Player: immediate feedback while links and the engine load; glass Close button. */
+#pwrap{position:relative}
+.ploading{position:absolute;inset:0;z-index:2;background:#000 center/cover no-repeat;display:flex;align-items:center;justify-content:center;pointer-events:none;transition:opacity .35s ease}
+.ploading.done{opacity:0}
+.ploading::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.pspinner{position:relative;width:44px;height:44px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:pspin .9s linear infinite}
+@keyframes pspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.pspinner{animation-duration:2.4s}}
+.ptop .glass-action.pclose{height:40px;padding:0 20px;font-size:14px}
