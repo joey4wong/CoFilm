@@ -409,3 +409,8 @@ body{overflow-x:clip}
 #search .searchbox{position:absolute;top:0;left:0;right:0;margin:56px auto 0;z-index:5;pointer-events:none}
 #search .searchbox > *{pointer-events:auto}
 #search #results{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-content:start;padding-top:calc(56px + 58px + 36px);padding-bottom:60px}
+
+/* Search results use the same poster size as the home rows (the phone rule above keeps three per row). */
+@media (min-width:601px){
+  #search #results{grid-template-columns:repeat(auto-fill,clamp(128px,11.5vw,200px));justify-content:start;gap:34px 20px}
+}

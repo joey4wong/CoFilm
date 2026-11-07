@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=76';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=77';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1244,6 +1244,19 @@ function searchText(it) {
   it._stm = it.meta;
   return it._st;
 }
+// Search results use exactly the poster size of the home rows (same fitting rule as fitPosterRail).
+function fitSearchGrid() {
+  const g = $('#results');
+  if (!g || $('#search').hidden) return;
+  if (innerWidth <= 600) { g.style.gridTemplateColumns = ''; return; }  // phones: the three-column rule applies
+  const cs = getComputedStyle(g), gap = 20;
+  const available = g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if (available <= 0) return;
+  const preferred = Math.min(200, Math.max(128, innerWidth * .115));
+  const count = Math.max(1, Math.round((available + gap) / (preferred + gap)));
+  g.style.gridTemplateColumns = `repeat(${count}, ${(available - gap * (count - 1)) / count}px)`;
+}
+window.addEventListener('resize', () => requestAnimationFrame(fitSearchGrid));
 function renderSearch() {
   const words = fold($('#q').value).split(/\s+/).filter(Boolean);
   let list;
@@ -1259,8 +1272,9 @@ function renderSearch() {
   }
   $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0;padding:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
     (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
+  fitSearchGrid(); requestAnimationFrame(fitSearchGrid);  // the scrollbar may appear after layout
 }
-function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); requestAnimationFrame(applyGlass); setTimeout(() => $('#q').focus(), 50); }
+function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); requestAnimationFrame(fitSearchGrid); requestAnimationFrame(applyGlass); setTimeout(() => $('#q').focus(), 50); }
 function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
 $('#q').oninput = renderSearch;
 $('#searchLink').onclick = e => { e.preventDefault(); openSearch(); };
