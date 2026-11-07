@@ -382,3 +382,30 @@ body{overflow-x:clip}
 .touch-rails :is(.browse-next,.browse-prev,.recommend-next,.recommend-prev,.cast-next,.cast-prev){display:none!important}
 .touch-rails :is(.browse-shell,.recommend-shell) .scroller{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
 .touch-rails .cast-shell .cast{-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+
+/* Search: clear Liquid Glass field and close button (same lens as nav and action buttons). */
+.searchfield{flex:1;min-width:0;height:58px;border-radius:999px;display:flex;align-items:center}
+.searchbox .searchfield input{flex:1;min-width:0;width:100%;height:100%;border:0;border-radius:inherit;background:transparent;color:#fff;font:inherit;font-size:18px;padding:0 26px;outline:none;position:relative;z-index:1;text-shadow:0 1px 3px rgba(0,0,0,.3)}
+.searchbox .searchfield input:focus{border:0}
+.searchfield:focus-within{transform:scale(1.01)}
+.searchbox .icon.lg{display:inline-flex;align-items:center;justify-content:center;flex:none;width:52px;height:52px;border-radius:999px;color:#fff}
+.searchbox .icon.lg svg{pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.searchbox .icon.lg:hover{transform:scale(1.05)}
+.searchbox .icon.lg:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4px}
+[data-theme="light"] .searchbox .searchfield input{background:transparent;color:var(--text);border:0;text-shadow:none}
+[data-theme="light"] .searchbox .icon.lg{color:var(--text)}
+[data-theme="light"] .searchbox .icon.lg svg{filter:none}
+[data-theme="light"] .searchbox .icon.lg:focus-visible{outline-color:#1b202b}
+/* The overlay itself must not be a backdrop root, or the glass inside it cannot refract.
+   The blur and tint live on a fixed layer behind the content instead. */
+.overlay{background:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.overlay::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:rgba(6,6,8,.85);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+[data-theme="light"] .overlay{background:none}
+[data-theme="light"] .overlay::before{background:rgba(233,234,232,.94)}
+
+/* Search: the overlay never scrolls; results scroll in their own layer underneath the fixed glass bar.
+   (An SVG backdrop lens cannot see content that sits inside the same scroll container.) */
+#search{overflow:hidden}
+#search .searchbox{position:absolute;top:0;left:0;right:0;margin:56px auto 0;z-index:5;pointer-events:none}
+#search .searchbox > *{pointer-events:auto}
+#search #results{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-content:start;padding-top:calc(56px + 58px + 36px);padding-bottom:60px}

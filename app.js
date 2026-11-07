@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=72';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=74';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -939,6 +939,8 @@ function applyGlass() {
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
+    // The SVG lens cannot read content inside a nested scroll container, so search keeps the plain glass layer.
+    if (el.closest('#search')) { el.style.removeProperty('backdrop-filter'); return; }
     const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
     if (!W || !H) return;
     const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
@@ -1238,7 +1240,7 @@ function renderSearch() {
   $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0;padding:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
     (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
 }
-function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
+function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); requestAnimationFrame(applyGlass); setTimeout(() => $('#q').focus(), 50); }
 function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
 $('#q').oninput = renderSearch;
 $('#searchLink').onclick = e => { e.preventDefault(); openSearch(); };
