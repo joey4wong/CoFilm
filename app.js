@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=74';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=75';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -59,10 +59,25 @@ async function listAll(link) {
 // ---------- filename parsing ----------
 // ---------- metadata (Cinemeta, no API key) ----------
 const TMDB_API = 'https://api.themoviedb.org/3';
+// Metadata requests must never turn a flaky network or a rate limit (HTTP 429) into "no such film".
+async function fetchJson(url, tries = 4) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.json();
+      last = new Error('HTTP ' + r.status);
+      if (r.status !== 429 && r.status < 500) break;          // 4xx other than 429: retrying will not help
+      const wait = Number(r.headers.get('retry-after')) * 1000;
+      await new Promise(res => setTimeout(res, Math.min(5000, wait || 600 * 2 ** i)));
+    } catch (e) { last = e; await new Promise(res => setTimeout(res, 500 * 2 ** i)); }
+  }
+  throw last;
+}
 // TMDB search: returns full TMDB details (with external_ids) of the best match, or null
 async function tmdbLookup(p, key, tmdbId) {
   const tv = p.kind === 'series', type = tv ? 'tv' : 'movie';
-  const get = async u => (await fetch(`${TMDB_API}${u}${u.includes('?') ? '&' : '?'}api_key=${key}`)).json();
+  const get = u => fetchJson(`${TMDB_API}${u}${u.includes('?') ? '&' : '?'}api_key=${key}`);
   if (!tmdbId) {
     const yearParam = p.year ? (tv ? `&first_air_date_year=${p.year}` : `&year=${p.year}`) : '';
     const tries = [p.title]; if (/^the /i.test(p.title)) tries.push(p.title.slice(4));
@@ -86,7 +101,9 @@ async function tmdbLookup(p, key, tmdbId) {
   if (!tmdbId) return null;
   return get(`/${type}/${tmdbId}?append_to_response=external_ids`);
 }
-const metaKey = p => 'meta3:' + p.kind + ':' + keyOf(p);
+const metaKey = p => 'meta4:' + p.kind + ':' + keyOf(p);
+// Older cache generations may hold wrong matches or dead poster URLs; drop them once.
+try { Object.keys(localStorage).filter(k => /^meta[0-9]?:/.test(k) && !k.startsWith('meta4:')).forEach(k => localStorage.removeItem(k)); } catch {}
 function cachedMetadata(p) {
   const entry = LS.get(metaKey(p));
   return { entry, fresh: isFreshMeta(entry) };
@@ -95,7 +112,7 @@ async function findMeta(p) {
   const ck = 'meta:' + p.kind + ':' + keyOf(p);
   const vk = metaKey(p), { entry: cached, fresh } = cachedMetadata(p);
   if (fresh) return cached.ok ? cached.m : null;
-  let m = null;
+  let m = null, failed = false;
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
     let id = manual, td = null;
@@ -104,19 +121,19 @@ async function findMeta(p) {
     if (key) {
       try {
         if (manual) {
-          const f = await (await fetch(`${TMDB_API}/find/${manual}?api_key=${key}&external_source=imdb_id`)).json();
+          const f = await fetchJson(`${TMDB_API}/find/${manual}?api_key=${key}&external_source=imdb_id`);
           const hit = (p.kind === 'series' ? f.tv_results : f.movie_results)?.[0];
           if (hit) td = await tmdbLookup(p, key, hit.id);
         } else td = await tmdbLookup(p, key);
         if (td && !id) id = td.external_ids?.imdb_id || td.imdb_id || null;
-      } catch (e) { console.warn('tmdb search', p.title, e); }
+      } catch (e) { failed = true; console.warn('tmdb search', p.title, e); }
     }
     // 2) Cinemeta search as fallback when TMDB has nothing
     if (!id && !td) {
       const tries = [p.title];
       if (/^the /i.test(p.title)) tries.push(p.title.slice(4));
       for (const t of tries) {
-        const j = await (await fetch(`${META}/catalog/${p.kind}/top/search=${encodeURIComponent(t)}.json`)).json();
+        const j = await fetchJson(`${META}/catalog/${p.kind}/top/search=${encodeURIComponent(t)}.json`);
         const list = j.metas || [];
         const yr = x => parseInt(x.releaseInfo || x.year || '0', 10);
         let hit = null, best = 0;
@@ -134,7 +151,7 @@ async function findMeta(p) {
     }
     // 3) details: Cinemeta (IMDb rating, logo, episodes) merged with TMDB (synopsis, poster, backdrop)
     let d = null;
-    if (id) { try { d = (await (await fetch(`${META}/meta/${p.kind}/${id}.json`)).json()).meta; } catch {} }
+    if (id) { try { d = (await fetchJson(`${META}/meta/${p.kind}/${id}.json`)).meta; } catch { failed = true; } }
     if (d || td) {
       const T = td || {}, I = 'https://image.tmdb.org/t/p/';
       const tYear = (T.release_date || T.first_air_date || '').slice(0, 4);
@@ -154,12 +171,23 @@ async function findMeta(p) {
         logo: d?.logo || (id ? `https://images.metahub.space/logo/medium/${id}/img` : ''), writer: d?.writer || [], awards: d?.awards,
       };
     }
-  } catch (e) { console.warn('meta', p.title, e); }
+  } catch (e) { failed = true; console.warn('meta', p.title, e); }
   if (!m && cached?.ok) { LS.set(vk, { ...cached, t: Date.now() }); return cached.m; }
-  LS.set(vk, { ok: !!m, m, t: Date.now() });
+  LS.set(vk, { ok: !!m, m, t: Date.now(), ...(m ? {} : { retry: failed ? 'soon' : 'later' }) });
   LS.del(ck);
   return m;
 }
+// A poster that fails to load triggers one fresh metadata lookup per title per visit.
+const healedPosters = new Set();
+window.cofilmPosterFailed = img => {
+  const href = img.closest('.card')?.getAttribute('href');
+  const it = state.items.find(x => '#/t/' + enc(x.key) === href);
+  if (!it || !it.meta || healedPosters.has(it.key)) return;
+  healedPosters.add(it.key);
+  const was = it.meta.poster;
+  LS.del(metaKey(it.parsed));
+  findMeta(it.parsed).then(nm => { if (nm && nm.poster && nm.poster !== was) { it.meta = nm; scheduleRender(); } }).catch(() => {});
+};
 async function pool(arr, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: n }, async () => { while (i < arr.length) { const k = i++; await fn(arr[k], k); } }));
@@ -621,7 +649,7 @@ function card(it, opts = {}) {
   const img = opts.wide ? bgOf(it) : posterOf(it);
   const pct = pr && pr.d ? pr.t / pr.d * 100 : 0;
   return `<a class="card" href="#/t/${enc(it.key)}"${opts.related ? ` data-genres="${esc(JSON.stringify(it.meta?.genres || []))}" title="${esc(title(it) + ' · ' + (it.meta?.genres || []).join(', '))}"` : ''}>
-    <div class="pos"><div class="ph">${opts.wide ? '' : esc(title(it))}</div>${img ? `<img loading="lazy" src="${esc(img)}" alt="${esc(title(it))}" data-fb="${esc(f.thumb || '')}" onerror="if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.remove()}">` : ''}
+    <div class="pos"><div class="ph">${opts.wide ? '' : esc(title(it))}</div>${img ? `<img loading="lazy" src="${esc(img)}" alt="${esc(title(it))}" data-fb="${esc(f.thumb || '')}" onerror="if(this.src!==this.dataset.fb)window.cofilmPosterFailed?.(this);if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.remove()}">` : ''}
       ${q ? `<span class="q">${q}</span>` : ''}
       ${pct > 1 ? `<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>` : ''}</div>
     ${opts.caption ? `<div class="cap">${esc(title(it))}</div><div class="sub">${esc(opts.caption)}</div>` : ''}</a>`;
@@ -1277,7 +1305,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 
 // ---------- events ----------
 document.addEventListener('click', e => {
