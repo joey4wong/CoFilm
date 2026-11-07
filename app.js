@@ -172,7 +172,7 @@ async function findMeta(p) {
         genres: (T.genres || []).map(g => g.name.replace('Science Fiction', 'Sci-Fi')).filter(Boolean).length ? T.genres.map(g => g.name.replace('Science Fiction', 'Sci-Fi')) : (d?.genres || d?.genre || []),
         cast: d?.cast || [], director: d?.director || (T.created_by || []).map(c => c.name), runtime: tRun ? tRun + ' min' : d?.runtime,
         poster: T.poster_path ? I + 'w500' + T.poster_path : (id ? `https://images.metahub.space/poster/medium/${id}/img` : ''),
-        background: T.backdrop_path ? I + 'w1280' + T.backdrop_path : d?.background,
+        background: T.backdrop_path ? I + 'w1280' + T.backdrop_path : (T.poster_path ? I + 'w1280' + T.poster_path : d?.background),
         country: (T.production_countries || []).map(c => c.name).join(', ') || d?.country,
         videos: (d?.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title, thumb: v.thumbnail, desc: v.overview || v.description })),
         logo: d?.logo || (id ? `https://images.metahub.space/logo/medium/${id}/img` : ''), writer: d?.writer || [], awards: d?.awards,
@@ -591,7 +591,8 @@ const fmtRuntime = r => { const n = parseInt(r, 10); if (!n) return r || ''; ret
 const yearOf = it => String(it.meta?.year || it.parsed.year || '').slice(0, 4);
 const logoOf = it => it.meta?.id ? (it.meta.logo || `https://images.metahub.space/logo/medium/${it.meta.id}/img`) : '';
 const posterOf = it => it.meta?.id ? it.meta.poster : it.files[0].thumb;
-const bgOf = it => it.meta?.background || it.files[0].thumb || '';
+const bgOf = it => it.meta?.background || posterOf(it) || it.files[0].thumb || '';
+const artCandidates = it => [...new Set([it.meta?.background, posterOf(it), it.files[0].thumb].filter(Boolean))];
 const enc = k => encodeURIComponent(k);
 function quality(f) {
   const n = f.name; const w = f.video?.width || 0;
@@ -664,7 +665,7 @@ function viewHome() {
   const shows = items.filter(it => it.parsed.kind === 'series');
   const classics = items.filter(it => parseInt(yearOf(it), 10) && parseInt(yearOf(it), 10) < 2000).sort((a, b) => yearOf(a) - yearOf(b));
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
-      <div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
+      <div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
       <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
@@ -854,7 +855,7 @@ function viewDetail(key) {
     ? `<img class="face" loading="lazy" decoding="async" src="${TMDB_IMG}${esc(p.p)}" alt="${esc(p.n)}">`
     : `<div class="face" style="background:linear-gradient(160deg,hsl(${hue(p.n)} 35% 32%),hsl(${(hue(p.n) + 40) % 360} 30% 16%))">${esc(p.n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div>`;
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
-  return `<div class="detail"><div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
+  return `<div class="detail"><div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
     <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
       <p class="desc">${esc(m.desc || 'No details found for this title. Use the edit button below to fix the match.')}</p>
       <div class="hbtns">
@@ -1004,6 +1005,27 @@ function setupRecommendationControls() {
 window.addEventListener('resize', updateRecommendationControls);
 
 // ---------- Daylight artwork: runs to the PLAY button, then fades to the page ----------
+// ---------- Artwork guard: fall back to poster, then a still from the file ----------
+const artChecked = new Map();
+function ensureArtwork() {
+  document.querySelectorAll('.bg[data-art]').forEach(el => {
+    let list; try { list = JSON.parse(el.dataset.art || '[]'); } catch { return; }
+    const current = el.style.backgroundImage.replace(/^url\(["']?/, '').replace(/["']?\)$/, '');
+    const start = Math.max(0, list.indexOf(current));
+    const apply = url => { el.style.backgroundImage = 'url("' + url + '")'; el.classList.remove('art-missing'); };
+    const tryAt = i => {
+      if (i >= list.length) { el.classList.add('art-missing'); return; }
+      const url = list[i];
+      if (artChecked.has(url)) { artChecked.get(url) ? apply(url) : tryAt(i + 1); return; }
+      const probe = new Image();
+      probe.onload = () => { artChecked.set(url, true); apply(url); };
+      probe.onerror = () => { artChecked.set(url, false); tryAt(i + 1); };
+      probe.src = url;
+    };
+    tryAt(start);
+  });
+}
+
 function layoutLightArtwork() {
   const light = document.documentElement.dataset.theme === 'light';
   const hero = $('.hero'), detail = $('.detail');
@@ -1080,7 +1102,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); settleLightArtwork(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
