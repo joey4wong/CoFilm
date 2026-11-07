@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -11,20 +11,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
 </head>
 <body>
 <div id="ambient"></div>
 <nav id="nav" aria-label="Main">
-  <a href="#/" data-route="home">首页</a>
-  <a href="#/movies" data-route="movies">电影</a>
-  <a href="#/shows" data-route="shows">剧集</a>
-  <a href="#/genres" data-route="genres">分类</a>
+  <a href="#/" data-route="home">Home</a>
+  <a href="#/movies" data-route="movies">Movies</a>
+  <a href="#/shows" data-route="shows">Shows</a>
+  <a href="#/genres" data-route="genres">Genres</a>
   <span class="sep"></span>
-  <button id="searchBtn" class="icon" aria-label="搜索"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-  <button id="refresh" class="icon" aria-label="刷新"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-  <button id="settingsBtn" class="icon" aria-label="设置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  <button id="searchBtn" class="icon" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+  <button id="refresh" class="icon" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  <button id="settingsBtn" class="icon" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </nav>
 
 <main id="view"></main>
@@ -32,28 +32,28 @@
 
 <div id="search" class="overlay" hidden>
   <div class="searchbox">
-    <input id="q" type="search" placeholder="搜索片名、演员、导演…" autocomplete="off">
-    <button class="icon" data-close-search aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <input id="q" type="search" placeholder="Search titles, actors, directors…" autocomplete="off">
+    <button class="icon" data-close-search aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
   <div id="results" class="grid"></div>
 </div>
 
 <div id="player" class="overlay" hidden>
-  <div class="ptop"><span id="ptitle"></span><button id="pclose" class="pill ghost">关闭</button></div>
+  <div class="ptop"><span id="ptitle"></span><button id="pclose" class="pill ghost">Close</button></div>
   <div id="pwrap"></div>
 </div>
 
 <div id="setup" class="overlay" hidden>
   <div class="box">
-    <h2>连接 OneDrive 电影文件夹</h2>
-    <p>粘贴电影文件夹的 OneDrive 只读分享链接。链接只保存在这台设备的浏览器里，不会上传到任何地方。</p>
+    <h2>Settings</h2>
+    <p>Paste the view-only OneDrive share link of your movie folder. It is saved only in this browser on this device and is never uploaded anywhere.</p>
     <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
-    <p class="small" style="margin:0">TMDB API Key（可选，用于演员头像）</p>
-    <input id="tmdbInput" type="text" placeholder="32 位 API Key" autocomplete="off">
-    <div class="actions"><button id="saveLink" class="pill">保存并加载</button><button id="cancelSetup" class="pill ghost">取消</button></div>
-    <button id="clearCache" class="pill ghost small">清除影片信息缓存</button>
+    <p class="small" style="margin:0">TMDB API key (optional: better matching, cast photos)</p>
+    <input id="tmdbInput" type="text" placeholder="32-character API key" autocomplete="off">
+    <div class="actions"><button id="saveLink" class="pill">Save &amp; load</button><button id="cancelSetup" class="pill ghost">Cancel</button></div>
+    <button id="clearCache" class="pill ghost small">Clear metadata cache</button>
   </div>
 </div>
-<script type="module" src="app.js?v=7"></script>
+<script type="module" src="app.js?v=8"></script>
 </body>
 </html>

@@ -15,7 +15,7 @@ const SUB_EXT = /\.(srt|ass|ssa|vtt)$/i;
 const STRONG = /^(\d{3,4}p|blu-?ray|bdrip|brrip|web-?dl|webrip|web|hdtv|hdrip|dvdrip|uhd|4k|remux|hdr|hdr10\+?|dv|x26[45]|h\.?26[45]|hevc|avc|10bit|8bit|ddp?\d?(\.\d)?|aac\d?(\.\d)?|dts(-hd)?|truehd|atmos|cc|it|amzn|nf|ma)$/i;
 const EDITION = /^(unrated|extended|dubbed|repack|proper|imax|remastered|directors|cut|uncut|criterion|multi|dual|limited|internal|bluray)$/i;
 
-const state = { items: [], genre: '全部', q: '', sort: 'added', listedAt: 0 };
+const state = { items: [], genre: 'All', q: '', sort: 'added', listedAt: 0 };
 
 // ---------- OneDrive (anonymous share access) ----------
 function shareId(link) {
@@ -28,7 +28,7 @@ async function token(force) {
   const r = await fetch('https://api-badgerp.svc.ms/v1.0/token', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: BADGER_APP }),
   });
-  if (!r.ok) throw new Error('获取访问令牌失败 ' + r.status);
+  if (!r.ok) throw new Error('Could not get access token ' + r.status);
   const j = await r.json();
   LS.set('od:token', { token: j.token, exp: j.expiryTimeUtc });
   return j.token;
@@ -36,7 +36,7 @@ async function token(force) {
 async function odGet(url, retry = true) {
   const r = await fetch(url, { headers: { Authorization: 'Badger ' + await token(), Prefer: 'autoredeem' } });
   if (r.status === 401 && retry) { await token(true); return odGet(url, false); }
-  if (!r.ok) throw new Error('OneDrive 返回 ' + r.status);
+  if (!r.ok) throw new Error('OneDrive returned ' + r.status);
   return r.json();
 }
 async function listAll(link) {
@@ -50,7 +50,7 @@ async function listAll(link) {
       for (const c of j.value || []) {
         if (c.folder && depth < 4) {
           const d = c.parentReference?.driveId || root.parentReference?.driveId;
-          await walk(`${API}/drives/${d}/items/${c.id}/children?$top=500&$expand=thumbnails`, path.concat(c.name), depth + 1).catch(e => console.warn('子文件夹读取失败', c.name, e));
+          await walk(`${API}/drives/${d}/items/${c.id}/children?$top=500&$expand=thumbnails`, path.concat(c.name), depth + 1).catch(e => console.warn('subfolder read failed', c.name, e));
         } else if (c.file) { c.__path = path; out.push(c); }
       }
       next = j['@odata.nextLink'];
@@ -243,15 +243,15 @@ async function load(force) {
   try {
     const cached = LS.get('od:files');
     if (cached && !state.items.length && !force) await applyFiles(cached);
-    else if (!cached) toast('正在读取 OneDrive…');
+    else if (!cached) toast('Loading OneDrive…');
     const files = await listAll(link);
     saveFiles(files);
     const added = await applyFiles(files);
-    if (force || !cached) toast(`共 ${state.items.length} 部`, 2500);
-    else if (added > 0) toast(`新增 ${added} 部影片`, 4000);
+    if (force || !cached) toast(`${state.items.length} titles`, 2500);
+    else if (added > 0) toast(`${added} new title${added > 1 ? 's' : ''} added`, 4000);
   } catch (e) {
     console.error(e);
-    toast(`读取失败：${e.message}。点右上角刷新重试`, 8000);
+    toast(`Loading failed: ${e.message}. Tap refresh to retry.`, 8000);
   } finally { loading = false; }
 }
 // re-check OneDrive every 5 minutes while the page is open, and when you come back to the tab
@@ -307,11 +307,11 @@ async function play(fileId, restart) {
     try {
       const b = await subBlob(s);
       const tr = document.createElement('track');
-      tr.kind = 'subtitles'; tr.label = /\.(ass|ssa)$/i.test(s.name) ? '外挂字幕 (ASS)' : '外挂字幕'; tr.srclang = 'zh'; tr.src = b.url;
+      tr.kind = 'subtitles'; tr.label = /\.(ass|ssa)$/i.test(s.name) ? 'Subtitles (ASS)' : 'Subtitles'; tr.srclang = 'und'; tr.src = b.url;
       if (b.fmt === 'srt') tr.dataset.format = 'srt';
       if (s === f.subs[0]) tr.default = true;
       player.appendChild(tr);
-    } catch (e) { console.warn('字幕加载失败', s.name, e); }
+    } catch (e) { console.warn('subtitle load failed', s.name, e); }
   }
   player.setAttribute('src', f.url);
   wrap.appendChild(player);
@@ -386,7 +386,7 @@ function metaRow(it, en = false) {
   if (m.rating) parts.push(`<span>${I.star}${esc(m.rating)}</span>`);
   if (yearOf(it)) parts.push(`<span>${I.cal}${esc(yearOf(it))}</span>`);
   if (g) parts.push(`<span>${esc(g)}</span>`);
-  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} ${en ? 'episodes' : '集'}</span>`);
+  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} episodes</span>`);
   if (q) parts.push(`<span class="tag">${q}</span>`);
   return `<div class="metarow">${parts.join('<span class="dot"></span>')}</div>`;
 }
@@ -429,27 +429,27 @@ function viewHome() {
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}">
       <div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
-        <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? '继续' : 'PLAY'}</button>
-        <span class="duo"><a href="#/t/${enc(it.key)}" aria-label="详情">${I.info}</a></span></div></div></div>`).join('');
+        <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
+        <span class="duo"><a href="#/t/${enc(it.key)}" aria-label="Details">${I.info}</a></span></div></div></div>`).join('');
   return `${hero.list.length ? `<section class="hero">${slides}
-      <div class="dots"><button class="pp" id="heroPause" aria-label="暂停轮播">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="第 ${i + 1} 张"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
+      <div class="dots"><button class="pp" id="heroPause" aria-label="Pause slideshow">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
     <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
-      ${row('继续观看', cw, { wide: true, caption: it => { const p = progressOf(it); return `剩余 ${fmtTime(p.d - p.t)}`; } })}
-      ${row('最近添加', byAdded.slice(0, 20))}
-      ${row('高分佳作', rated)}
-      ${row('剧集', shows)}
+      ${row('Continue watching', cw, { wide: true, caption: it => { const p = progressOf(it); return `${fmtTime(p.d - p.t)} left`; } })}
+      ${row('Recently added', byAdded.slice(0, 20))}
+      ${row('Top rated', rated)}
+      ${row('Shows', shows)}
       ${genres.map(g => row(gName(g), items.filter(it => it.meta?.genres?.includes(g)))).join('')}
-      ${row('经典老片', classics)}
-      ${!items.length ? '<p class="empty">还没有读取到影片。</p>' : ''}
+      ${row('Classics', classics)}
+      ${!items.length ? '<p class="empty">No titles loaded yet.</p>' : ''}
     </div>`;
 }
-const GENRE_ZH = { Drama: '剧情', Romance: '爱情', Comedy: '喜剧', Thriller: '惊悚', Horror: '恐怖', Crime: '犯罪', Mystery: '悬疑', Adventure: '冒险', History: '历史', Action: '动作', 'Sci-Fi': '科幻', Fantasy: '奇幻', War: '战争', Biography: '传记', Music: '音乐', Animation: '动画', Family: '家庭', Western: '西部', Documentary: '纪录片', Sport: '运动' };
-const gName = g => GENRE_ZH[g] ? `${GENRE_ZH[g]}` : g;
+const GENRE_ZH = {};
+const gName = g => g;
 function viewList(kind) {
   const list = state.items.filter(it => it.parsed.kind === kind).sort((a, b) => b.added - a.added);
   setAmbient(list[0] ? bgOf(list[0]) : '');
-  return `<div class="page"><h1>${kind === 'movie' ? '电影' : '剧集'} <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
-    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ') })).join('') || '<p class="empty">暂无</p>'}</div></div>`;
+  return `<div class="page"><h1>${kind === 'movie' ? 'Movies' : 'Shows'} <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
+    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ') })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
 }
 function viewGenres(sel) {
   const gcount = new Map();
@@ -458,7 +458,7 @@ function viewGenres(sel) {
   sel = sel && gs.includes(sel) ? sel : gs[0];
   const list = state.items.filter(it => it.meta?.genres?.includes(sel)).sort((a, b) => (parseFloat(b.meta?.rating) || 0) - (parseFloat(a.meta?.rating) || 0));
   setAmbient(list[0] ? bgOf(list[0]) : '');
-  return `<div class="page"><h1>分类</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(gName(g))} · ${gcount.get(g)}</button>`).join('')}</div>
+  return `<div class="page"><h1>Genres</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(gName(g))} · ${gcount.get(g)}</button>`).join('')}</div>
     <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.rating ? '★ ' + it.meta.rating : ''].filter(Boolean).join(' · ') })).join('')}</div></div>`;
 }
 // ---------- TMDB credits (cast photos) ----------
@@ -571,8 +571,8 @@ window.addEventListener('hashchange', render);
 // ---------- search ----------
 function renderSearch() {
   const q = $('#q').value.trim().toLowerCase();
-  const list = !q ? [...state.items].sort((a, b) => b.added - a.added) : state.items.filter(it => [title(it), it.parsed.title, ...(it.meta?.cast || []), ...(it.meta?.director || []), ...(it.meta?.genres || []).map(g => g + ' ' + gName(g)), yearOf(it), it.files.map(f => f.name).join(' ')].join(' ').toLowerCase().includes(q));
-  $('#results').innerHTML = list.map(it => card(it, { caption: yearOf(it) })).join('') || '<p class="empty">没有找到</p>';
+  const list = !q ? [...state.items].sort((a, b) => b.added - a.added) : state.items.filter(it => [title(it), it.parsed.title, ...(it.meta?.cast || []), ...(it.meta?.director || []), ...(it.meta?.genres || []).map(g => g ), yearOf(it), it.files.map(f => f.name).join(' ')].join(' ').toLowerCase().includes(q));
+  $('#results').innerHTML = list.map(it => card(it, { caption: yearOf(it) })).join('') || '<p class="empty">No results</p>';
 }
 function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
 function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
@@ -583,7 +583,7 @@ $('#q').oninput = renderSearch;
 function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#tmdbInput').value = LS.get('tmdb:key') || ''; $('#setup').hidden = false; }
 $('#saveLink').onclick = () => {
   const v = $('#linkInput').value.trim();
-  if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com|.*sharepoint\.com)/.test(v)) { alert('这看起来不是 OneDrive 分享链接'); return; }
+  if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com|.*sharepoint\.com)/.test(v)) { alert('That does not look like a OneDrive share link'); return; }
   const k = $('#tmdbInput').value.trim(); if (k) LS.set('tmdb:key', k); else LS.del('tmdb:key');
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; load(true);
 };
