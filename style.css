@@ -161,8 +161,8 @@ main{min-height:100vh}
 #nav .sep,#nav .icon{display:none!important}
 
 /* ratings */
-.rates{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
-.rate{display:inline-flex;align-items:center;gap:7px;color:#fff;text-decoration:none;transition:opacity .2s,transform .3s cubic-bezier(.34,1.56,.64,1)}
+.rates{display:flex;flex-wrap:nowrap;align-items:center;gap:clamp(8px,1.1vw,16px);white-space:nowrap}
+.rate{display:inline-flex;align-items:center;gap:5px;flex:none;color:#fff;text-decoration:none;transition:opacity .2s,transform .3s cubic-bezier(.34,1.56,.64,1)}
 .rate:hover{transform:scale(1.06)}
 .rate:hover span{text-decoration:underline}
 .rate .ic{width:22px;height:22px;flex:none;display:block}
@@ -172,3 +172,4 @@ main{min-height:100vh}
 .adv summary{cursor:pointer;margin-bottom:8px}
 #codeMsg{margin:4px 0 0}
 .rate .imdbmark{display:inline-flex;align-items:center;height:21px;padding:0 6px;border-radius:4px;background:#f5c518;color:#000;font:800 12.5px/1 "Helvetica Neue",Arial,sans-serif;letter-spacing:-.2px;width:auto}
+.infobox dl{grid-template-columns:auto 1fr;column-gap:22px}
