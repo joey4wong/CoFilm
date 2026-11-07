@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=69';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=70';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -958,6 +958,12 @@ window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGl
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
+// ---------- Touch devices swipe rails directly; pointer devices keep the arrow buttons ----------
+const touchRails = matchMedia('(hover: none) and (pointer: coarse)');
+const syncTouchRails = () => document.documentElement.classList.toggle('touch-rails', touchRails.matches);
+syncTouchRails();
+touchRails.addEventListener?.('change', () => { syncTouchRails(); requestAnimationFrame(() => { fitCastRail(); fitPosterRails(); }); });
+
 // ---------- Cast rail: whole portraits, whole-page steps ----------
 let castResizeObserver;
 function castStartIndex(list) {
@@ -978,13 +984,15 @@ function fitCastRail() {
   const total = list.children.length, gap = parseFloat(getComputedStyle(list).gap);
   const fullWidth = shell.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const preferred = innerWidth <= 820 ? 112 : Math.min(170, Math.max(120, innerWidth * .1));
-  const arrowWidth = (innerWidth <= 600 ? 34 : 38) + parseFloat(style.gap);
+  const touch = touchRails.matches;
+  const arrowWidth = touch ? 0 : (innerWidth <= 600 ? 34 : 38) + parseFloat(style.gap);
   let available = Math.max(1, Math.floor(fullWidth - arrowWidth));
   let count = Math.max(1, Math.ceil((available + gap) / (preferred + gap)));
-  const showArrow = total > count;
-  if (!showArrow) { available = Math.max(1, Math.floor(fullWidth)); count = total; }
+  const overflow = total > count;
+  const showArrow = overflow && !touch;
+  if (!overflow) { available = Math.max(1, Math.floor(fullWidth)); count = total; }
   const width = Math.max(1, Math.floor(Math.min(preferred, (available - gap * (count - 1)) / count)));
-  const signature = [available, count, width, total, showArrow].join('|');
+  const signature = [available, count, width, total, showArrow, touch].join('|');
   if (list.dataset.fitSignature === signature && list.dataset.restoreIndex === undefined) { updateCastControls(); return; }
   const index = Number(list.dataset.restoreIndex ?? castStartIndex(list));
   delete list.dataset.restoreIndex;

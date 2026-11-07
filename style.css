@@ -376,3 +376,8 @@ body{overflow-x:clip}
 .recommend-prev svg,.browse-prev svg,.cast-prev svg{pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
 .recommend-prev:focus-visible,.browse-prev:focus-visible,.cast-prev:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:4px}
 [data-theme="light"] :is(.recommend-prev,.browse-prev,.cast-prev):focus-visible{outline-color:#1b202b}
+
+/* Touch: native swipe with whole-card snapping, no arrow buttons anywhere. */
+.touch-rails :is(.browse-next,.browse-prev,.recommend-next,.recommend-prev,.cast-next,.cast-prev){display:none!important}
+.touch-rails :is(.browse-shell,.recommend-shell) .scroller{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+.touch-rails .cast-shell .cast{-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
