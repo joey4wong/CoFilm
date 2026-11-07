@@ -248,3 +248,13 @@ body{overflow-x:clip}
   .logo{max-height:140px}
   .hero .logo{max-height:120px}
 }
+
+/* Phone library pages: keep Movies, Shows and Genres at three posters per row. */
+@media (max-width:600px){
+  .page .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px}
+  .page .grid .card{min-width:0}
+  .page .grid .card .pos{border-radius:10px}
+  .page .grid .card .cap{font-size:12px;margin-top:8px}
+  .page .grid .card .sub{font-size:10.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .page .grid .card .q{top:6px;left:6px;font-size:9px;padding:1px 5px}
+}
