@@ -961,6 +961,7 @@ function render() {
   const sig = location.hash;
   const keepScroll = sig === lastRoute;
   const y = scrollY;
+  const castX = keepScroll ? ($('.cast')?.scrollLeft || 0) : 0;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
@@ -968,6 +969,7 @@ function render() {
   else if (r.name === 'genres') html = viewGenres(r.arg);
   else html = viewHome();
   $('#view').innerHTML = html;
+  if (keepScroll && $('.cast')) $('.cast').scrollLeft = castX;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
