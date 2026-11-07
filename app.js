@@ -646,7 +646,9 @@ function row(name, list, opts = {}) {
   if (!list.length) return '';
   if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
 
-  return `<section class="row ${opts.wide ? 'wide' : ''}"><h2>${esc(name)}</h2><div class="scroller">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div></section>`;
+  const railId = 'home-row-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+
 }
 const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
 
@@ -991,14 +993,16 @@ window.addEventListener('resize', fitCastRail);
 
 // ---------- Related titles: finite, at most ten matching recommendations ----------
 function updateRecommendationControls() {
-  const section = $('.recommend-section'), list = section?.querySelector('.scroller');
-  if (!list) return;
-  const next = section.querySelector('.recommend-next');
-  next.hidden = list.scrollWidth <= list.clientWidth + 1;
-  next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+  document.querySelectorAll('.recommend-section,.browse-section').forEach(section => {
+    const list = section.querySelector('.scroller'), next = section.querySelector('[data-recommend-next],[data-row-next]');
+    const shell = list.parentElement, style = getComputedStyle(shell);
+    const fullWidth = shell.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    next.hidden = list.scrollWidth <= fullWidth + 1;
+    next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+  });
 }
 function setupRecommendationControls() {
-  $('.recommend-section .scroller')?.addEventListener('scroll', updateRecommendationControls, { passive: true });
+  document.querySelectorAll('.recommend-section .scroller,.browse-section .scroller').forEach(list => list.addEventListener('scroll', updateRecommendationControls, { passive: true }));
   updateRecommendationControls();
 }
 window.addEventListener('resize', updateRecommendationControls);
@@ -1097,6 +1101,7 @@ function render() {
   const y = scrollY;
   const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
   const recommendationX = keepScroll ? ($('.recommend-section .scroller')?.scrollLeft || 0) : 0;
+  const browseScroll = keepScroll ? new Map([...document.querySelectorAll('.browse-section')].map(s => [s.dataset.rowKey, s.querySelector('.scroller').scrollLeft])) : null;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
@@ -1106,6 +1111,7 @@ function render() {
   $('#view').innerHTML = html;
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').scrollLeft = recommendationX;
+  if (browseScroll) document.querySelectorAll('.browse-section').forEach(s => { s.querySelector('.scroller').scrollLeft = browseScroll.get(s.dataset.rowKey) || 0; });
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
@@ -1205,9 +1211,9 @@ document.addEventListener('click', e => {
     if (slide) { showSlide(+slide.dataset.slide); startHero(); }
     return; // The surrounding padding is a safe zone, never a movie link.
   }
-  const recommendNext = t.closest('[data-recommend-next]');
+  const recommendNext = t.closest('[data-recommend-next],[data-row-next]');
   if (recommendNext) {
-    const list = recommendNext.closest('.recommend-section').querySelector('.scroller');
+    const list = recommendNext.closest('.recommend-section,.browse-section').querySelector('.scroller');
     const span = list.querySelector('.card').offsetWidth + parseFloat(getComputedStyle(list).gap);
     list.scrollBy({ left: span * Math.max(1, Math.floor(list.clientWidth / span)), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     return;
