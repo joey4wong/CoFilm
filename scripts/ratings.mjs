@@ -83,7 +83,7 @@ async function tmdb(p) {
     if (best && bs >= 1) {
       const d = await (await get(`https://api.themoviedb.org/3/${type}/${best.id}?api_key=${TMDB}&append_to_response=external_ids,keywords`)).json();
       const kw = (d.keywords?.keywords || d.keywords?.results || []).map(k => k.name.toLowerCase());
-      return { kw, imdb: d.external_ids?.imdb_id || d.imdb_id, title: d.title || d.name, orig: d.original_title || d.original_name, year: parseInt((d.release_date || d.first_air_date || '0').slice(0, 4), 10), tv };
+      return { id: best.id, kw, imdb: d.external_ids?.imdb_id || d.imdb_id, title: d.title || d.name, orig: d.original_title || d.original_name, year: parseInt((d.release_date || d.first_air_date || '0').slice(0, 4), 10), tv };
     }
   }
   return null;
@@ -116,11 +116,29 @@ async function rtSearch(t) {
   return null;
 }
 async function douban(id) {
-  const j = await (await get(`https://m.douban.com/rexxar/api/v2/movie/${id}?ck=&for_mobile=1`, { headers: { Referer: `https://m.douban.com/movie/subject/${id}/`, 'User-Agent': MUA } })).json();
-  return { u: `https://movie.douban.com/subject/${id}/`, v: j.rating?.value ? String(j.rating.value) : null, n: j.rating?.count || 0, g: j.genres || [] };
+  let last;
+  for (const kind of ['movie', 'subject']) {   // two endpoints; each has its own rate limit
+    try {
+      const j = await (await get(`https://m.douban.com/rexxar/api/v2/${kind}/${id}?ck=&for_mobile=1`, { headers: { Referer: `https://m.douban.com/movie/subject/${id}/`, 'User-Agent': MUA } })).json();
+      return { u: `https://movie.douban.com/subject/${id}/`, v: j.rating?.value ? String(j.rating.value) : null, n: j.rating?.count || 0, g: j.genres || [] };
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+async function zhTitles(t) {
+  const out = [];
+  try {
+    const type = t.tv ? 'tv' : 'movie';
+    const tr = await (await get(`https://api.themoviedb.org/3/${type}/${t.id}/translations?api_key=${TMDB}`)).json();
+    for (const x of tr.translations || []) if (x.iso_639_1 === 'zh') { const n = x.data?.title || x.data?.name; if (n) out.push(n); }
+    const alt = await (await get(`https://api.themoviedb.org/3/${type}/${t.id}/alternative_titles?api_key=${TMDB}`)).json();
+    for (const x of alt.titles || alt.results || []) if (['CN', 'TW', 'HK'].includes(x.iso_3166_1) && x.title) out.push(x.title);
+  } catch {}
+  return [...new Set(out)];
 }
 async function doubanSearch(t) {
-  for (const q of [t.title, t.orig].filter((x, i, a) => x && a.indexOf(x) === i)) {
+  const qs = [t.title, t.orig, ...(await zhTitles(t))].filter((x, i, a) => x && a.indexOf(x) === i);
+  for (const q of qs) {
     const j = await (await get('https://movie.douban.com/j/subject_suggest?q=' + encodeURIComponent(q), { headers: { Referer: 'https://movie.douban.com/' } })).json();
     const hit = j.find(x => x.type === 'movie' && (!t.year || Math.abs(parseInt(x.year, 10) - t.year) <= 1));
     if (hit) return hit.id;
@@ -148,7 +166,7 @@ for (const t of matched) {
     dbId = wd[t.imdb]?.db || (old.db?.u || '').match(/subject\/(\d+)/)?.[1] || await doubanSearch(t);
     if (dbId) {
       for (let k = 0; k < 3; k++) {
-        try { out.db = await douban(dbId); break; } catch (e) { if (k === 2) throw e; await sleep(4000 * (k + 1)); }
+        try { out.db = await douban(dbId); break; } catch (e) { if (k === 2) throw e; await sleep(15000 * (k + 1)); }
       }
     }
   } catch (e) { console.warn('douban', t.title, e.message); out.db = old.db?.v ? old.db : (dbId ? { u: `https://movie.douban.com/subject/${dbId}/`, v: null } : old.db); }
