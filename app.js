@@ -41,7 +41,6 @@ async function odGet(url, retry = true) {
 }
 async function listAll(link) {
   const sid = shareId(link);
-  const root = await odGet(`${API}/shares/${sid}/driveitem`);
   const out = [];
   async function walk(url, path, depth) {
     let next = url;
@@ -49,14 +48,14 @@ async function listAll(link) {
       const j = await odGet(next);
       for (const c of j.value || []) {
         if (c.folder && depth < 4) {
-          const d = c.parentReference?.driveId || root.parentReference?.driveId;
+          const d = c.parentReference?.driveId;
           await walk(`${API}/drives/${d}/items/${c.id}/children?$top=500&$expand=thumbnails`, path.concat(c.name), depth + 1).catch(e => console.warn('subfolder read failed', c.name, e));
         } else if (c.file) { c.__path = path; out.push(c); }
       }
       next = j['@odata.nextLink'];
     }
   }
-  await walk(`${API}/shares/${sid}/driveitem/children?$top=500&$expand=thumbnails`, [], 0);
+  await walk(`${API}/shares/${sid}/driveitem/children?$top=500&$expand=thumbnails&$select=id,name,size,createdDateTime,lastModifiedDateTime,webUrl,file,folder,video,parentReference,@content.downloadUrl`, [], 0);
   return out;
 }
 
@@ -839,7 +838,7 @@ if (urlCode) {
 }
 if (/^#(link|tmdb)=/.test(location.hash)) {
   const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get('link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); }
+  if (h.get('link') && h.get('link') !== LS.get('od:link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); }
   if (h.get('tmdb')) LS.set('tmdb:key', h.get('tmdb'));
   history.replaceState(null, '', location.pathname);
 }
