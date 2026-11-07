@@ -3,14 +3,17 @@
 // Runs in GitHub Actions (server side), because RT and Douban block in-browser requests (CORS).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { tscore, selectDoubanCandidate, doubanRecord } from './rating-match.mjs';
 
 const LINK = process.env.OD_LINK, TMDB = process.env.TMDB_KEY;
 if (!LINK || !TMDB) { console.error('Missing OD_LINK or TMDB_KEY'); process.exit(1); }
 const OUT = 'ratings.enc.json';
+const onlyImdb = new Set((process.env.RATINGS_IMDB || '').split(/[,\s]+/).filter(Boolean));
+if ([...onlyImdb].some(id => !/^tt\d+$/.test(id))) throw Error('Invalid RATINGS_IMDB filter');
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
 const MUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const get = async (url, opts = {}) => { const r = await fetch(url, { ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) } }); if (!r.ok) throw new Error(r.status + ' ' + url); return r; };
+const get = async (url, opts = {}) => { const r = await fetch(url, { signal: AbortSignal.timeout(25000), ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) } }); if (!r.ok) { const u = new URL(url); throw new Error(r.status + ' ' + u.origin + u.pathname); } return r; }; // Never log API keys or private query strings
 
 // ---- crypto (must match app.js) ----
 const keyBytes = crypto.createHash('sha256').update('cofilm-ratings:' + LINK.trim()).digest();
@@ -66,9 +69,6 @@ for (const v of vids) { const p = parseName(v.name); titles.set(p.kind + '|' + p
 console.log(`${files.length} files, ${titles.size} titles`);
 
 // ---- TMDB match (same scoring idea as app.js) ----
-const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
-const words = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
-const tscore = (n, t) => { if (norm(n) === norm(t)) return 100; const a = words(t), b = words(n); return a.filter(w => b.includes(w)).length + (a[0] === b[0] ? .5 : 0); };
 async function tmdb(p) {
   const tv = p.kind === 'series', type = tv ? 'tv' : 'movie';
   for (const yp of p.year ? [tv ? `&first_air_date_year=${p.year}` : `&year=${p.year}`, ''] : ['']) {
@@ -91,6 +91,7 @@ async function tmdb(p) {
 
 // ---- rating sources ----
 async function wikidata(ids) {
+  if (!ids.length) return {};
   const q = `SELECT ?imdb ?rt ?db WHERE { VALUES ?imdb { ${ids.map(i => `"${i}"`).join(' ')} } ?f wdt:P345 ?imdb. OPTIONAL{?f wdt:P1258 ?rt} OPTIONAL{?f wdt:P4529 ?db} }`;
   const j = await (await get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), { headers: { Accept: 'application/sparql-results+json' } })).json();
   const m = {}; for (const b of j.results.bindings) m[b.imdb.value] = { rt: b.rt?.value, db: b.db?.value }; return m;
@@ -120,7 +121,7 @@ async function douban(id) {
   for (const kind of ['movie', 'subject']) {   // two endpoints; each has its own rate limit
     try {
       const j = await (await get(`https://m.douban.com/rexxar/api/v2/${kind}/${id}?ck=&for_mobile=1`, { headers: { Referer: `https://m.douban.com/movie/subject/${id}/`, 'User-Agent': MUA } })).json();
-      return { u: `https://movie.douban.com/subject/${id}/`, v: j.rating?.value ? String(j.rating.value) : null, n: j.rating?.count || 0, g: j.genres || [] };
+      return doubanRecord(j, id);
     } catch (e) { last = e; }
   }
   throw last;
@@ -137,13 +138,20 @@ async function zhTitles(t) {
   return [...new Set(out)];
 }
 async function doubanSearch(t) {
-  const qs = [t.title, t.orig, ...(await zhTitles(t))].filter((x, i, a) => x && a.indexOf(x) === i);
+  const aliases = [t.orig, t.title, ...(await zhTitles(t))].filter((x, i, a) => x && a.indexOf(x) === i);
+  const qs = [t.imdb, ...aliases].filter(Boolean);
+  let successes = 0, last;
   for (const q of qs) {
-    const j = await (await get('https://movie.douban.com/j/subject_suggest?q=' + encodeURIComponent(q), { headers: { Referer: 'https://movie.douban.com/' } })).json();
-    const hit = j.find(x => x.type === 'movie' && (!t.year || Math.abs(parseInt(x.year, 10) - t.year) <= 1));
-    if (hit) return hit.id;
+    try {
+      const j = await (await get('https://movie.douban.com/j/subject_suggest?q=' + encodeURIComponent(q), { headers: { Referer: 'https://movie.douban.com/' } })).json();
+      if (!Array.isArray(j)) throw Error('Invalid Douban suggestion response');
+      successes++;
+      const hit = selectDoubanCandidate(j, aliases, t.year);
+      if (hit) return hit;
+    } catch (e) { last = e; } // A failed spelling/query must not suppress the other aliases.
     await sleep(800);
   }
+  if (!successes && last) throw last;
   return null;
 }
 
@@ -151,7 +159,8 @@ async function doubanSearch(t) {
 let prev = {};
 try { prev = decrypt(JSON.parse(fs.readFileSync(OUT, 'utf8'))).items || {}; } catch {}
 const matched = [];
-for (const p of titles.values()) { try { const m = await tmdb(p); if (m?.imdb) matched.push(m); } catch (e) { console.warn('tmdb', p.title, e.message); } }
+for (const p of titles.values()) { try { const m = await tmdb(p); if (m?.imdb && (!onlyImdb.size || onlyImdb.has(m.imdb))) matched.push(m); } catch (e) { console.warn('tmdb', p.title, e.message); } }
+if (onlyImdb.size && !matched.length) throw Error('No requested IMDb ID matched; keeping the previous rating file untouched');
 let wd = {}; try { wd = await wikidata(matched.map(m => m.imdb)); } catch (e) { console.warn('wikidata', e.message); }
 const items = {};
 for (const t of matched) {
@@ -163,13 +172,19 @@ for (const t of matched) {
   } catch (e) { console.warn('rt', t.title, e.message); out.rt = old.rt; }
   let dbId = null;
   try {
-    dbId = wd[t.imdb]?.db || (old.db?.u || '').match(/subject\/(\d+)/)?.[1] || await doubanSearch(t);
+    dbId = wd[t.imdb]?.db || (old.db?.u || '').match(/subject\/(\d+)/)?.[1];
+    if (!dbId) {
+      // Retry with a small exact-ID query when the batch failed or omitted this title.
+      try { const one = await wikidata([t.imdb]); dbId = one[t.imdb]?.db; } catch (e) { console.warn('wikidata single', t.title, e.message); }
+    }
+    dbId ||= await doubanSearch(t);
     if (dbId) {
       for (let k = 0; k < 3; k++) {
         try { out.db = await douban(dbId); break; } catch (e) { if (k === 2) throw e; await sleep(15000 * (k + 1)); }
       }
     }
-  } catch (e) { console.warn('douban', t.title, e.message); out.db = old.db?.v ? old.db : (dbId ? { u: `https://movie.douban.com/subject/${dbId}/`, v: null } : old.db); }
+  } catch (e) { console.warn('douban', t.title, e.message); out.db = { ...(old.db || {}), ...(dbId ? { u: `https://movie.douban.com/subject/${dbId}/` } : {}), status: 'unavailable', attemptedAt: new Date().toISOString() }; // Keep any prior score/check time; failure is not an unrated subject.
+  }
   // Erotic: Douban lists the genre, or TMDB tags it as an erotic / softcore film
   const EROTIC_KW = ['erotic movie', 'softcore', 'erotica', 'sexploitation', 'erotic film'];
   out.ero = !!((out.db?.g || []).includes('\u60c5\u8272') || (t.kw || []).some(k => EROTIC_KW.includes(k)) || old.ero && !out.db?.g);

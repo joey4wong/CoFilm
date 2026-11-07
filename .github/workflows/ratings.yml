@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: node --test scripts/ratings.test.mjs
       - run: node scripts/ratings.mjs
         env:
           OD_LINK: ${{ secrets.OD_LINK }}

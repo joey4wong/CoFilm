@@ -799,8 +799,9 @@ function ratingsHtml(it) {
     douban: '<svg viewBox="0 0 24 24" class="ic"><rect width="24" height="24" rx="5.5" fill="#00b51d"/><text x="12" y="17.6" text-anchor="middle" font-family="PingFang SC,Hiragino Sans GB,Microsoft YaHei,sans-serif" font-weight="700" font-size="15" fill="#fff">\u8c46</text></svg>',
   };
   const rtPct = parseInt(r.rt?.v || '', 10);
-  const a = (cls, icon, label, val, url) => `<a class="rate ${cls}" href="${esc(url)}" target="_blank" rel="noopener" title="${label}">${icon}<span>${esc(val || '–')}</span></a>`;
-  return `<div class="rates">${a('imdb', ICON.imdb, 'IMDb', imdbV ? imdbV : '', imdbU)}${a('rt', isNaN(rtPct) || rtPct >= 60 ? ICON.fresh : ICON.rotten, 'Rotten Tomatoes (critics)', r.rt?.v || '', rtU)}${a('db', ICON.douban, 'Douban', r.db?.v || '', dbU)}</div>`;
+  const a = (cls, icon, label, val, url) => `<a class="rate ${cls}" href="${esc(url)}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label + (val ? ': ' + val : ''))}">${icon}<span>${esc(val || '–')}</span></a>`;
+  const dbLabel = r.db?.status === 'unrated' ? 'Douban: No rating yet' : r.db?.status === 'unavailable' ? (r.db?.v ? 'Douban: Last available rating; refresh unavailable' : 'Douban: Rating temporarily unavailable') : r.db?.v ? 'Douban' : r.db?.u ? 'Douban: Rating not yet verified' : 'Douban: Search for this title';
+  return `<div class="rates">${a('imdb', ICON.imdb, 'IMDb', imdbV ? imdbV : '', imdbU)}${a('rt', isNaN(rtPct) || rtPct >= 60 ? ICON.fresh : ICON.rotten, 'Rotten Tomatoes (critics)', r.rt?.v || '', rtU)}${a('db', ICON.douban, dbLabel, r.db?.v || '', dbU)}</div>`;
 }
 
 

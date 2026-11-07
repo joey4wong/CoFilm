@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { norm, tscore, selectDoubanCandidate, doubanRecord } from './rating-match.mjs';
+test('accented original title matches filename', () => { assert.equal(norm('Königin der Nacht'), norm('Konigin.der.Nacht')); assert.equal(tscore('Königin der Nacht','Konigin der Nacht'),100); });
+test('non-Latin titles stay distinct', () => { assert.notEqual(norm('夜之女王'), norm('女王')); assert.equal(tscore('夜之女王','女王'),0); assert.equal(tscore('', ''),0); });
+const original={id:'28458916',type:'movie',title:'夜之女王',sub_title:'Königin der Nacht',year:'2017'};
+test('original title allows one-year production/broadcast difference',()=>assert.equal(selectDoubanCandidate([original],['Queen of the Night','Königin der Nacht'],2016),'28458916'));
+test('same-name Korean film is rejected by year',()=>assert.equal(selectDoubanCandidate([{...original,id:'20427090',year:'2013'}],['夜之女王'],2016),null));
+test('same-year unrelated title is not accepted',()=>assert.equal(selectDoubanCandidate([{...original,title:'Other film',sub_title:'Different'}],['Queen of the Night'],2016),null));
+test('ambiguous same-name candidates are not guessed',()=>assert.equal(selectDoubanCandidate([original,{...original,id:'123456'}],['Königin der Nacht'],2016),null));
+test('zero is explicitly unrated, never score 0',()=>{const r=doubanRecord({title:'夜之女王',rating:{value:0,count:0},genres:['剧情']},'28458916','test');assert.equal(r.v,null);assert.equal(r.status,'unrated');assert.equal(r.n,0);assert.match(r.u,/28458916/);});
+test('positive scores and vote counts survive',()=>{const r=doubanRecord({title:'Film',rating:{value:7.6,count:123}},'1');assert.equal(r.v,'7.6');assert.equal(r.status,'rated');assert.equal(r.n,123);});
+test('incomplete API response cannot become an unrated record',()=>assert.throws(()=>doubanRecord({title:'Film'},'1')));
