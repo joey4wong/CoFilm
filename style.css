@@ -161,17 +161,13 @@ main{min-height:100vh}
 #nav .sep,#nav .icon{display:none!important}
 
 /* ratings */
-.rates{display:flex;flex-direction:column;gap:7px}
-.rate{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;color:#fff;text-decoration:none;transition:opacity .2s}
-.rate:hover{opacity:.8}
+.rates{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.rate{display:inline-flex;align-items:center;gap:7px;color:#fff;text-decoration:none;transition:opacity .2s,transform .3s cubic-bezier(.34,1.56,.64,1)}
+.rate:hover{transform:scale(1.06)}
 .rate:hover span{text-decoration:underline}
-.rate i{white-space:nowrap;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:5px;line-height:1.4}
-.rate.imdb i{background:#f5c518;color:#000}
-.rate.rt i{background:#fa320a;color:#fff}
-.rate.db i{background:#00b51d;color:#fff}
-.rate span{font-weight:600}
-.rate small{white-space:nowrap;color:rgba(255,255,255,.65);font-size:12.5px}
-
+.rate .ic{width:22px;height:22px;flex:none;display:block}
+.rate .ic.wide{width:42px;height:21px}
+.rate span{font-weight:600;font-size:15.5px}
 .adv{margin-top:14px;color:var(--muted)}
 .adv summary{cursor:pointer;margin-bottom:8px}
 #codeMsg{margin:4px 0 0}

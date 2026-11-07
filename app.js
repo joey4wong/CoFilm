@@ -598,8 +598,15 @@ function ratingsHtml(it) {
   const imdbV = r.imdb?.v || m.rating;
   const rtU = r.rt?.u || `https://www.rottentomatoes.com/search?search=${q}`;
   const dbU = r.db?.u || `https://search.douban.com/movie/subject_search?search_text=${id || q}`;
-  const a = (cls, label, val, url, sub) => `<a class="rate ${cls}" href="${esc(url)}" target="_blank" rel="noopener"><i>${label}</i><span>${esc(val || '–')}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</a>`;
-  return `<div class="rates">${a('imdb', 'IMDb', imdbV ? imdbV + '/10' : '', imdbU)}${a('rt', 'Rotten Tomatoes', r.rt?.v || '', rtU, r.rt?.a ? 'Audience ' + r.rt.a : '')}${a('db', 'Douban', r.db?.v ? r.db.v + '/10' : '', dbU)}</div>`;
+  const ICON = {
+    imdb: '<svg viewBox="0 0 48 24" class="ic wide"><rect width="48" height="24" rx="4" fill="#f5c518"/><text x="24" y="17" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="13.5" fill="#000">IMDb</text></svg>',
+    fresh: '<svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="13.6" r="9.2" fill="#fa320a"/><ellipse cx="8.6" cy="10.6" rx="2.2" ry="1.3" fill="#ff8a6b" opacity=".55" transform="rotate(-30 8.6 10.6)"/><path fill="#00912d" d="M12.1 5.6c-.9-1.9-2.9-2.8-4.9-2.4 1.6.6 2.6 1.6 3 2.6-1.9-.9-4-.6-5.4.7 2-.1 3.6.4 4.6 1.4-1 .7-1.6 1.9-1.5 3.2 1-1.1 2.3-1.7 3.6-1.6.9 1.1 2.2 1.6 3.6 1.5-1-.8-1.4-1.9-1.4-2.9 1.4-.2 2.9.2 4 1.1-.4-1.7-1.8-2.9-3.4-3.3.8-.7 1.9-1 3-1-1.5-.9-3.5-.7-4.7.3-.1-.6-.3-1.1-.5-1.6z"/></svg>',
+    rotten: '<svg viewBox="0 0 24 24" class="ic"><path fill="#0fc755" d="M12 2.6c.9 0 1.2 1.7 2 2.1.9.4 2.2-.8 3-.2.7.6-.3 2 .1 2.8.4.9 2.3.8 2.6 1.7.3.9-1.3 1.6-1.3 2.6 0 .9 1.7 1.6 1.4 2.5-.3.9-2.2.6-2.7 1.4-.5.8.5 2.4-.2 3-.7.6-2.1-.6-3-.2-.8.4-1 2.3-1.9 2.3s-1.2-1.8-2-2.2c-.9-.4-2.3.8-3 .2-.8-.6.2-2.1-.2-2.9-.5-.8-2.4-.6-2.7-1.5-.3-.9 1.4-1.6 1.4-2.5S2.1 11.1 2.4 10.2c.3-.9 2.2-.8 2.6-1.6.4-.8-.6-2.3.1-2.9.7-.6 2.1.6 3 .2.8-.4 1-2.3 1.9-2.3z"/></svg>',
+    douban: '<svg viewBox="0 0 24 24" class="ic"><rect width="24" height="24" rx="5.5" fill="#00b51d"/><text x="12" y="17.6" text-anchor="middle" font-family="PingFang SC,Hiragino Sans GB,Microsoft YaHei,sans-serif" font-weight="700" font-size="15" fill="#fff">\u8c46</text></svg>',
+  };
+  const rtPct = parseInt(r.rt?.v || '', 10);
+  const a = (cls, icon, label, val, url) => `<a class="rate ${cls}" href="${esc(url)}" target="_blank" rel="noopener" title="${label}">${icon}<span>${esc(val || '–')}</span></a>`;
+  return `<div class="rates">${a('imdb', ICON.imdb, 'IMDb', imdbV ? imdbV : '', imdbU)}${a('rt', isNaN(rtPct) || rtPct >= 60 ? ICON.fresh : ICON.rotten, 'Rotten Tomatoes (critics)', r.rt?.v || '', rtU)}${a('db', ICON.douban, 'Douban', r.db?.v || '', dbU)}</div>`;
 }
 
 function viewDetail(key) {
