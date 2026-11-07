@@ -1,4 +1,4 @@
-// 我的影院: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
+// CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
 const META = 'https://v3-cinemeta.strem.io';
