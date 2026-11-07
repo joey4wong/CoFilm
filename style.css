@@ -26,6 +26,10 @@ main{min-height:100vh}
 .hero{position:relative;height:min(100vh,1000px);min-height:620px;overflow:hidden}
 .slide{position:absolute;inset:0;opacity:0;transition:opacity .9s ease;pointer-events:none}
 .slide.on{opacity:1;pointer-events:auto}
+.hero-link{position:absolute;inset:0;z-index:1;cursor:pointer}
+.hero-link:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:-6px}
+.hero .hcontent{pointer-events:none}
+.hero .hbtns{pointer-events:auto}
 .slide .bg{position:absolute;inset:0;background-size:cover;background-position:center 20%;transform:scale(1.04);transition:transform 9s linear}
 .slide.on .bg{transform:scale(1)}
 .slide::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,10,.75) 0%,rgba(10,10,10,.35) 45%,transparent 70%),linear-gradient(180deg,transparent 55%,rgba(10,10,10,.6) 85%,var(--bg) 100%)}

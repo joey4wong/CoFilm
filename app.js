@@ -661,11 +661,12 @@ function viewHome() {
   const genres = [...gcount.entries()].filter(x => x[1] >= 3).sort((a, b) => b[1] - a[1]).slice(0, 6).map(x => x[0]);
   const shows = items.filter(it => it.parsed.kind === 'series');
   const classics = items.filter(it => parseInt(yearOf(it), 10) && parseInt(yearOf(it), 10) < 2000).sort((a, b) => yearOf(a) - yearOf(b));
-  const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}">
+  const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
       <div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
+      <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
-        <span class="duo lg"><a href="#/t/${enc(it.key)}" aria-label="Details">${I.info}</a></span></div></div></div>`).join('');
+        </div></div></div>`).join('');
   return `${hero.list.length ? `<section class="hero">${slides}
       <div class="dots"><button class="pp" id="heroPause" aria-label="Pause slideshow">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
     <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
@@ -976,7 +977,10 @@ function render() {
 function showSlide(i) {
   if (!hero.list.length) return;
   hero.idx = (i + hero.list.length) % hero.list.length;
-  document.querySelectorAll('.slide').forEach(s => s.classList.toggle('on', +s.dataset.i === hero.idx));
+  document.querySelectorAll('.slide').forEach(s => {
+    const active = +s.dataset.i === hero.idx;
+    s.classList.toggle('on', active); s.inert = !active; s.setAttribute('aria-hidden', String(!active));
+  });
   document.querySelectorAll('.dots [data-slide]').forEach(d => d.classList.toggle('on', +d.dataset.slide === hero.idx));
   setAmbient(bgOf(hero.list[hero.idx]));
 }
