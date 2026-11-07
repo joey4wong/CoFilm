@@ -353,17 +353,21 @@ class ODSource {
 }
 
 // ---------- player ----------
+// The player engine is ~11 MB, so it is only downloaded when you press play (and warmed up after the page is idle).
+let playerLib = null;
+function loadPlayerLib() { return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player/dist/element.js'); }
+(window.requestIdleCallback || (f => setTimeout(f, 4000)))(() => setTimeout(loadPlayerLib, 3000));
 let player = null, saveTimer = 0, current = null;
 async function play(fileId, restart) {
   let it, f;
   for (const x of state.items) for (const y of x.files) if (y.id === fileId) { it = x; f = y; }
   if (!f) return;
   f = await freshFile(f);
-  closeDetail();
   current = { it, f };
   $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
   $('#player').hidden = false; document.body.style.overflow = 'hidden';
   const wrap = $('#pwrap'); wrap.innerHTML = '';
+  await loadPlayerLib();
   await customElements.whenDefined('movi-player');
   player = document.createElement('movi-player');
   player.setAttribute('controls', ''); player.setAttribute('crossorigin', 'anonymous');
@@ -414,7 +418,6 @@ function toast(msg, ms = 0) {
 }
 let rt = 0;
 function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 400); }
-function closeDetail() {}
 const title = it => it.meta?.name || it.parsed.title;
 const fmtSize = b => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (b / 1e6).toFixed(0) + ' MB';
 const fmtTime = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
@@ -441,8 +444,6 @@ const I = {
   star: '<svg class="star" viewBox="0 0 24 24"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></svg>',
   cal: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
-  od: '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 1.5A3.3 3.3 0 0 0 7 18z"/></svg>',
-  fix: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg>',
 };
@@ -505,13 +506,11 @@ function viewHome() {
       ${row('Recently added', byAdded.slice(0, 20))}
       ${row('Top rated', rated)}
       ${row('Shows', shows)}
-      ${genres.map(g => row(gName(g), items.filter(it => it.meta?.genres?.includes(g)))).join('')}
+      ${genres.map(g => row(g, items.filter(it => it.meta?.genres?.includes(g)))).join('')}
       ${row('Classics', classics)}
       ${!items.length ? '<p class="empty">No titles loaded yet.</p>' : ''}
     </div>`;
 }
-const GENRE_ZH = {};
-const gName = g => g;
 function viewList(kind) {
   const list = state.items.filter(it => it.parsed.kind === kind).sort((a, b) => b.added - a.added);
   setAmbient(list[0] ? bgOf(list[0]) : '');
@@ -525,7 +524,7 @@ function viewGenres(sel) {
   sel = sel && gs.includes(sel) ? sel : gs[0];
   const list = state.items.filter(it => it.meta?.genres?.includes(sel)).sort((a, b) => (parseFloat(b.meta?.rating) || 0) - (parseFloat(a.meta?.rating) || 0));
   setAmbient(list[0] ? bgOf(list[0]) : '');
-  return `<div class="page"><h1>Genres</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(gName(g))} · ${gcount.get(g)}</button>`).join('')}</div>
+  return `<div class="page"><h1>Genres</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(g)} · ${gcount.get(g)}</button>`).join('')}</div>
     <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.rating ? '★ ' + it.meta.rating : ''].filter(Boolean).join(' · ') })).join('')}</div></div>`;
 }
 // ---------- TMDB credits (cast photos) ----------
@@ -755,7 +754,6 @@ function renderSearch() {
 }
 function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
 function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
-$('#searchBtn').onclick = openSearch;
 $('#q').oninput = renderSearch;
 
 
@@ -791,8 +789,6 @@ $('#saveLink').onclick = () => {
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
 $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
-$('#settingsBtn').onclick = openSetup;
-$('#refresh').onclick = () => load(true);
 
 // ---------- events ----------
 document.addEventListener('click', e => {
@@ -808,18 +804,6 @@ document.addEventListener('click', e => {
   if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
-  const fx = t.closest('[data-fix]');
-  if (fx) {
-    const it = state.items.find(x => x.key === fx.dataset.fix);
-    const v = prompt('Enter an IMDb ID (e.g. tt0274812) or the correct English title:', it.meta?.id || it.parsed.title);
-    if (!v) return;
-    const ck = it.parsed.kind + ':' + keyOf(it.parsed);
-    LS.del('meta3:' + ck);
-    const isId = /^tt\d+$/.test(v.trim());
-    if (isId) LS.set('fix:' + ck, v.trim()); else LS.del('fix:' + ck);
-    const p2 = isId ? it.parsed : { ...it.parsed, title: v.trim() };
-    findMeta(p2).then(m => { if (m) { if (/^tt/.test(m.id)) LS.set('fix:' + ck, m.id); else LS.del('fix:' + ck); LS.set('meta3:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? 'Matched: ' + m.name : 'Still no match', 3000); });
-  }
 });
 $('#pclose').onclick = closePlayer;
 document.addEventListener('keydown', e => {
