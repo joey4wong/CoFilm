@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>我的影院</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
+</head>
+<body>
+<header id="top">
+  <div class="brand">我的影院</div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="搜索片名、演员、导演…" autocomplete="off">
+    <select id="sort" title="排序">
+      <option value="added">最近添加</option>
+      <option value="year">上映年份</option>
+      <option value="rating">评分</option>
+      <option value="title">片名</option>
+    </select>
+    <button id="refresh" class="ghost" title="重新读取 OneDrive">刷新</button>
+    <button id="settingsBtn" class="ghost" title="设置">设置</button>
+  </div>
+</header>
+<nav id="genres"></nav>
+<main>
+  <section id="continue" hidden>
+    <h2>继续观看</h2>
+    <div class="row" id="continueRow"></div>
+  </section>
+  <div id="status"></div>
+  <div id="wall"></div>
+</main>
+
+<div id="detail" class="overlay" hidden></div>
+<div id="player" class="overlay" hidden>
+  <div class="ptop"><span id="ptitle"></span><button id="pclose" class="ghost">关闭 ✕</button></div>
+  <div id="pwrap"></div>
+</div>
+
+<div id="setup" class="overlay" hidden>
+  <div class="box">
+    <h2>连接 OneDrive 电影文件夹</h2>
+    <p>粘贴电影文件夹的 OneDrive 分享链接（只读“Anyone with the link can view”）。链接只保存在这台设备的浏览器里，不会上传到任何地方。</p>
+    <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
+    <div class="actions"><button id="saveLink">保存并加载</button><button id="cancelSetup" class="ghost">取消</button></div>
+    <p class="small">换设备时：在这里重新粘贴链接即可。也可以在“设置”里清除缓存的影片信息。</p>
+    <button id="clearCache" class="ghost small">清除影片信息缓存</button>
+  </div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

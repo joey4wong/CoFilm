@@ -1,0 +1,86 @@
+:root{
+  --bg:#0d0f14; --panel:#161a22; --card:#1a1f29; --text:#e9ecf2; --muted:#9aa3b2;
+  --accent:#f5c518; --accent2:#4f8cff; --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Segoe UI,sans-serif}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--accent);color:#111;border:0;border-radius:999px;padding:8px 16px;font-weight:600;cursor:pointer}
+button.ghost{background:rgba(255,255,255,.08);color:var(--text);font-weight:500}
+button.ghost:hover{background:rgba(255,255,255,.16)}
+button.small{font-size:13px;padding:5px 12px}
+header{position:sticky;top:0;z-index:20;display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(13,15,20,.86);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
+.brand{font-size:20px;font-weight:800;letter-spacing:.5px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#q{width:280px;max-width:50vw;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 16px;outline:none}
+#q:focus{border-color:var(--accent2)}
+select{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 12px}
+nav#genres{display:flex;gap:8px;flex-wrap:wrap;padding:14px 28px 0}
+nav#genres button{background:rgba(255,255,255,.06);color:var(--muted);font-weight:500;padding:5px 14px;font-size:13px}
+nav#genres button.on{background:var(--text);color:#111}
+main{padding:18px 28px 60px}
+h2{font-size:17px;margin:6px 0 12px}
+#status{color:var(--muted);margin:10px 0}
+/* continue watching row */
+.row{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;margin-bottom:18px}
+.cw{flex:0 0 280px;cursor:pointer;border-radius:12px;overflow:hidden;background:var(--card);position:relative}
+.cw img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#222}
+.cw .t{padding:8px 12px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw .bar{position:absolute;left:0;bottom:38px;height:4px;background:var(--accent)}
+/* masonry wall */
+#wall{column-width:210px;column-gap:18px}
+.card{break-inside:avoid;margin:0 0 18px;background:var(--card);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .18s ease, box-shadow .18s ease;display:inline-block;width:100%}
+.card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.45)}
+.poster{position:relative;width:100%;aspect-ratio:2/3;background:linear-gradient(135deg,#232a36,#151920);overflow:hidden}
+.poster img{width:100%;height:100%;object-fit:cover;display:block}
+.poster .ph{position:absolute;inset:0;display:flex;align-items:flex-end;padding:14px;font-weight:700;font-size:18px;line-height:1.25;background:linear-gradient(transparent 40%,rgba(0,0,0,.75))}
+.badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.72);color:var(--accent);font-weight:700;font-size:12px;padding:2px 8px;border-radius:999px}
+.badge.q{left:auto;right:8px;color:#fff}
+.badge.new{top:auto;bottom:8px;left:8px;background:var(--accent2);color:#fff}
+.prog{position:absolute;left:0;bottom:0;height:4px;background:var(--accent)}
+.info{padding:10px 12px 12px}
+.info .t{font-weight:700;font-size:15px;line-height:1.3}
+.info .m{color:var(--muted);font-size:12.5px;margin-top:3px}
+.info .g{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.info .g span{font-size:11px;background:rgba(255,255,255,.07);padding:1px 7px;border-radius:999px;color:#c9d0dc}
+.info .d{color:#b8c0cc;font-size:12.5px;margin-top:7px;line-height:1.45}
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:50;background:rgba(5,6,9,.82);backdrop-filter:blur(6px);overflow:auto}
+.overlay[hidden],section[hidden]{display:none !important}
+.dwrap{max-width:1000px;margin:40px auto;background:var(--panel);border-radius:18px;overflow:hidden;position:relative}
+.hero{position:relative;min-height:300px;background-size:cover;background-position:center top}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(22,26,34,.15),var(--panel) 92%)}
+.hero .x{position:absolute;top:14px;right:14px;z-index:3}
+.dbody{display:flex;gap:26px;padding:0 30px 30px;margin-top:-170px;position:relative;z-index:2}
+.dbody img.p{width:210px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);align-self:flex-start;background:#222;aspect-ratio:2/3;object-fit:cover}
+.dmain{flex:1;min-width:0}
+.dmain h1{margin:60px 0 4px;font-size:30px;line-height:1.15}
+.dmain .m{color:var(--muted);margin-bottom:10px}
+.dmain .m b{color:var(--accent)}
+.dmain p.desc{color:#d3d8e0;line-height:1.65}
+.dmain .kv{font-size:13.5px;color:var(--muted);margin:4px 0}
+.dmain .kv span{color:var(--text)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.file{font-size:12.5px;color:var(--muted);background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;margin-top:10px;word-break:break-all}
+.eps{margin-top:14px;display:grid;gap:8px}
+.ep{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.05);border-radius:10px;padding:8px 12px}
+/* player */
+#player{background:#000;display:flex;flex-direction:column}
+.ptop{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;color:#ddd}
+#pwrap{flex:1;min-height:0}
+#pwrap movi-player{width:100%;height:100%;display:block}
+/* setup */
+.box{max-width:560px;margin:12vh auto;background:var(--panel);padding:26px;border-radius:18px}
+.box input{width:100%;background:#0f1218;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;margin:8px 0}
+.box p{color:var(--muted)}
+.small{font-size:12.5px}
+@media (max-width:700px){
+  header{padding:10px 14px;flex-direction:column;align-items:stretch}
+  #q{width:100%;max-width:none}
+  main{padding:12px 14px}
+  nav#genres{padding:10px 14px 0}
+  #wall{column-width:150px;column-gap:12px}
+  .dbody{flex-direction:column;margin-top:-120px;padding:0 18px 24px}
+  .dbody img.p{width:140px}
+  .dmain h1{margin-top:6px;font-size:24px}
+}
