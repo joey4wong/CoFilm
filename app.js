@@ -670,7 +670,7 @@ function viewHome() {
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
         </div></div></div>`).join('');
   return `${hero.list.length ? `<section class="hero">${slides}
-      <div class="dots">${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
+      <div class="dots" data-hero-controls role="group" aria-label="Slideshow navigation">${hero.list.map((_, i) => `<button type="button" data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-current="${i === hero.idx}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
     <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
       ${row('Continue watching', cw, { wide: true, caption: it => { const p = progressOf(it); return `${fmtTime(p.d - p.t)} left`; } })}
       ${row('Recently added', byAdded.slice(0, 20))}
@@ -1009,7 +1009,10 @@ function showSlide(i) {
     const active = +s.dataset.i === hero.idx;
     s.classList.toggle('on', active); s.inert = !active; s.setAttribute('aria-hidden', String(!active));
   });
-  document.querySelectorAll('.dots [data-slide]').forEach(d => d.classList.toggle('on', +d.dataset.slide === hero.idx));
+  document.querySelectorAll('.dots [data-slide]').forEach(d => {
+    const active = +d.dataset.slide === hero.idx;
+    d.classList.toggle('on', active); d.setAttribute('aria-current', String(active));
+  });
   setAmbient(bgOf(hero.list[hero.idx]));
 }
 function startHero() { stopHero(); if (hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
@@ -1084,6 +1087,12 @@ $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta
 // ---------- events ----------
 document.addEventListener('click', e => {
   const t = e.target;
+  if (t.closest('[data-hero-controls]')) {
+    e.preventDefault(); e.stopPropagation();
+    const slide = t.closest('[data-slide]');
+    if (slide) { showSlide(+slide.dataset.slide); startHero(); }
+    return; // The surrounding padding is a safe zone, never a movie link.
+  }
   const recommendNext = t.closest('[data-recommend-next]');
   if (recommendNext) {
     const list = recommendNext.closest('.recommend-section').querySelector('.scroller');
@@ -1103,8 +1112,6 @@ document.addEventListener('click', e => {
   if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
   const pi = t.closest('[data-play-item]');
   if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
-  const sl = t.closest('[data-slide]');
-  if (sl) { showSlide(+sl.dataset.slide); startHero(); return; }
   const g = t.closest('[data-genre]');
   if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
