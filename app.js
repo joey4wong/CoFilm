@@ -83,7 +83,8 @@ const keyOf = p => (p.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()) + 
 async function findMeta(p) {
   const ck = 'meta:' + p.kind + ':' + keyOf(p);
   const cached = LS.get(ck);
-  if (cached && (cached.ok || Date.now() - cached.t < 3 * 864e5)) return cached.ok ? cached.m : null;
+  const age = cached ? Date.now() - cached.t : Infinity;
+  if (cached && (cached.ok ? age < 7 * 864e5 : age < 3 * 864e5)) return cached.ok ? cached.m : null;
   let m = null;
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
@@ -127,6 +128,7 @@ async function findMeta(p) {
       };
     }
   } catch (e) { console.warn('meta', p.title, e); }
+  if (!m && cached?.ok) { LS.set(ck, { ...cached, t: Date.now() }); return cached.m; }
   LS.set(ck, { ok: !!m, m, t: Date.now() });
   return m;
 }
@@ -165,30 +167,43 @@ function buildItems(files) {
   return [...map.values()];
 }
 
+let loading = false;
+function saveFiles(files) {
+  LS.set('od:files', files.map(f => ({ id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'], webUrl: f.webUrl, createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime, video: f.video, file: f.file, thumbnails: f.thumbnails })));
+  LS.set('od:listedAt', Date.now());
+}
+async function applyFiles(files) {
+  const old = new Map(state.items.map(it => [it.key, it.meta]));
+  const before = state.items.length;
+  state.listedAt = LS.get('od:listedAt');
+  state.items = buildItems(files);
+  for (const it of state.items) if (old.has(it.key)) it.meta = old.get(it.key);
+  render();
+  await pool(state.items, 6, async it => { const m = await findMeta(it.parsed); if (m !== it.meta) { it.meta = m; scheduleRender(); } });
+  render();
+  return state.items.length - before;
+}
 async function load(force) {
   const link = LS.get('od:link');
   if (!link) { openSetup(); return; }
-  toast('正在读取 OneDrive…');
+  if (loading) return; loading = true;
   try {
-    let files = !force && LS.get('od:files');
-    const fresh = files && Date.now() - (LS.get('od:listedAt') || 0) < 40 * 60e3;
-    if (!fresh) {
-      files = await listAll(link);
-      LS.set('od:files', files.map(f => ({ id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'], webUrl: f.webUrl, createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime, video: f.video, file: f.file, thumbnails: f.thumbnails })));
-      LS.set('od:listedAt', Date.now());
-    }
-    state.listedAt = LS.get('od:listedAt');
-    state.items = buildItems(files);
-    render();
-    toast(`共 ${state.items.length} 部，正在获取海报和影片信息…`);
-    await pool(state.items, 6, async it => { it.meta = await findMeta(it.parsed); scheduleRender(); });
-    toast(`共 ${state.items.length} 部`, 2500);
-    render();
+    const cached = LS.get('od:files');
+    if (cached && !state.items.length && !force) await applyFiles(cached);
+    else if (!cached) toast('正在读取 OneDrive…');
+    const files = await listAll(link);
+    saveFiles(files);
+    const added = await applyFiles(files);
+    if (force || !cached) toast(`共 ${state.items.length} 部`, 2500);
+    else if (added > 0) toast(`新增 ${added} 部影片`, 4000);
   } catch (e) {
     console.error(e);
     toast(`读取失败：${e.message}。点右上角刷新重试`, 8000);
-  }
+  } finally { loading = false; }
 }
+// re-check OneDrive every 5 minutes while the page is open, and when you come back to the tab
+setInterval(() => { if (!document.hidden && $('#player').hidden) load(); }, 5 * 60e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (LS.get('od:listedAt') || 0) > 2 * 60e3 && $('#player').hidden) load(); });
 async function freshFile(f) {
   if (Date.now() - state.listedAt < 40 * 60e3) return f;
   await load(true);
@@ -399,7 +414,7 @@ const creditsPending = new Set();
 function creditsOf(it) {
   const id = it.meta?.id; if (!id) return null;
   const c = LS.get('tmdbc:' + id);
-  if (c) return c;
+  if (c && Date.now() - (c.t || 0) < 7 * 864e5) return c;
   const key = LS.get('tmdb:key');
   if (key && !creditsPending.has(id)) {
     creditsPending.add(id);
@@ -407,7 +422,7 @@ function creditsOf(it) {
       try {
         const f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json();
         const hit = (f.movie_results || [])[0] || (f.tv_results || [])[0];
-        if (!hit) { LS.set('tmdbc:' + id, { cast: [], crew: [] }); return; }
+        if (!hit) { LS.set('tmdbc:' + id, { cast: [], crew: [], t: Date.now() }); return; }
         const tv = !(f.movie_results || [])[0];
         const cr = await (await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`)).json();
         const cast = (cr.cast || []).slice(0, 20).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
@@ -417,7 +432,7 @@ function creditsOf(it) {
       } catch (e) { console.warn('tmdb', e); }
     })();
   }
-  return null;
+  return c || null;
 }
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
@@ -519,7 +534,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; load(true);
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => k.startsWith('meta:')).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => k.startsWith('meta:') || k.startsWith('tmdbc:')).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 $('#settingsBtn').onclick = openSetup;
 $('#refresh').onclick = () => load(true);
 
