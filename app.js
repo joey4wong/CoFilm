@@ -829,6 +829,18 @@ function trailerOf(it) {
   return null;
 }
 
+// A neutral portrait for missing TMDB photos, also used when an image fails to load.
+function castPlaceholder(name) {
+  return `<div class="face face-placeholder" role="img" aria-label="${esc(name)}: Photo unavailable"><svg viewBox="0 0 80 100" aria-hidden="true" focusable="false"><circle cx="40" cy="29" r="15"/><path d="M10 90V80c0-17 13-28 30-28s30 11 30 28v10z"/></svg></div>`;
+}
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.matches('.person img.face')) return;
+  const holder = document.createElement('template');
+  holder.innerHTML = castPlaceholder(img.alt);
+  img.replaceWith(holder.content.firstElementChild);
+}, true);
+
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
@@ -844,7 +856,6 @@ function viewDetail(key) {
   const people = cr && (cr.cast.length || cr.crew.length)
     ? [...cr.crew, ...cr.cast]
     : [...(m.director || []).map(n => ({ n, r: 'Director' })), ...(m.cast || []).map(n => ({ n, r: '' }))];
-  const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   const primaryGenre = (m.genres || [])[0];
   const similar = primaryGenre ? state.items
     .filter(x => x !== it && x.parsed.kind === it.parsed.kind && (!m.id || x.meta?.id !== m.id) && (x.meta?.genres || [])[0] === primaryGenre)
@@ -856,7 +867,7 @@ function viewDetail(key) {
     .slice(0, 10).map(o => o.x) : [];
   const face = p => p.p
     ? `<img class="face" loading="lazy" decoding="async" src="${TMDB_IMG}${esc(p.p)}" alt="${esc(p.n)}">`
-    : `<div class="face" style="background:linear-gradient(160deg,hsl(${hue(p.n)} 35% 32%),hsl(${(hue(p.n) + 40) % 360} 30% 16%))">${esc(p.n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div>`;
+    : castPlaceholder(p.n);
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
   return `<div class="detail"><div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
     <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}

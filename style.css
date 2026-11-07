@@ -356,3 +356,8 @@ body{overflow-x:clip}
  .browse-shell{gap:10px}
  .browse-next{flex-basis:34px;width:34px;height:34px;margin-top:calc(12px + var(--browse-card-width) * var(--browse-center) - 17px)}
 }
+
+/* Missing portraits: a neutral silhouette, never initials. Paint only across themes. */
+.person .face.face-placeholder{background:#272c34;color:#79828f;overflow:hidden;box-shadow:none;outline:0}
+.person .face-placeholder svg{width:62%;height:62%;flex:none;fill:currentColor}
+[data-theme="light"] .person .face.face-placeholder{background:#e2e5e9;color:#a0a8b3}
