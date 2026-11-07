@@ -284,3 +284,52 @@ body{overflow-x:clip}
   .cast-section.expanded .person .n{font-size:12px}
   .cast-section.expanded .person .r{font-size:10px;letter-spacing:.06em}
 }
+
+/* Automatic day/night theme. Movie artwork and the video canvas retain their colors. */
+:root{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light;--bg:#f5f6f8;--text:#171b24;--muted:rgba(23,27,36,.72);--dim:rgba(23,27,36,.6);--glass:rgba(255,255,255,.28);--line:rgba(23,27,36,.12)}
+[data-theme="light"] #ambient{filter:blur(90px) saturate(1.15) brightness(1.2);opacity:.24}
+[data-theme="light"] #ambient::after{background:linear-gradient(180deg,rgba(245,246,248,.25),var(--bg) 100%)}
+[data-theme="light"] .slide::after{background:linear-gradient(90deg,rgba(245,246,248,.96) 0%,rgba(245,246,248,.8) 38%,rgba(245,246,248,.12) 75%,transparent),linear-gradient(180deg,rgba(245,246,248,.06) 40%,var(--bg) 100%)}
+[data-theme="light"] .detail .bg::after{background:linear-gradient(90deg,rgba(245,246,248,.96),rgba(245,246,248,.68) 55%,rgba(245,246,248,.15)),linear-gradient(180deg,rgba(245,246,248,.04) 20%,var(--bg) 100%)}
+[data-theme="light"] .logo{filter:grayscale(1) brightness(.18)}
+[data-theme="light"] .metarow{color:rgba(23,27,36,.85)}
+[data-theme="light"] .metarow .dot{background:rgba(23,27,36,.45)}
+[data-theme="light"] .tag.gray{background:rgba(23,27,36,.12)}
+[data-theme="light"] .desc{color:#252a35;text-shadow:none}
+[data-theme="light"] #nav a{color:rgba(23,27,36,.75)}
+[data-theme="light"] #nav a:hover{color:#11151d}
+[data-theme="light"] #nav a.on{color:#11151d;background:rgba(23,27,36,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 0 .5px rgba(23,27,36,.08)}
+[data-theme="light"] .lg{background:rgba(255,255,255,.2)!important;box-shadow:inset 0 0 0 .5px rgba(23,27,36,.12),inset 0 1px 0 rgba(255,255,255,.5),0 8px 30px rgba(23,27,36,.1),0 1px 3px rgba(23,27,36,.08);-webkit-backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01);backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01)}
+[data-theme="light"] #nav.lg{-webkit-backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01);backdrop-filter:blur(1.5px) saturate(1.2) brightness(1.01)}
+[data-theme="light"] .infobox.lg{background:rgba(255,255,255,.35)!important}
+[data-theme="light"] .infobox.lg dd{text-shadow:none}
+[data-theme="light"] .infobox.lg dt{color:var(--muted);text-shadow:none}
+[data-theme="light"] .rate{color:var(--text)}
+[data-theme="light"] .pill{background:#1b202b;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 7px 20px rgba(23,27,36,.15)}
+[data-theme="light"] .pill svg{fill:#fff}
+[data-theme="light"] .pill.ghost{background:rgba(23,27,36,.06);color:var(--text);border-color:rgba(23,27,36,.12);box-shadow:0 4px 16px rgba(23,27,36,.06)}
+[data-theme="light"] .pill.ghost svg{fill:none}
+[data-theme="light"] .duo button,[data-theme="light"] .duo a{color:var(--text)}
+[data-theme="light"] .duo.lg i{background:rgba(23,27,36,.2)}
+[data-theme="light"] .dots button{background:rgba(23,27,36,.3)}
+[data-theme="light"] .dots button.on{background:#1b202b}
+[data-theme="light"] .card .pos{background:linear-gradient(135deg,#e0e3e9,#cbd1db);box-shadow:0 5px 16px rgba(23,27,36,.14);outline-color:rgba(23,27,36,.08)}
+[data-theme="light"] .card:hover .pos{box-shadow:0 12px 28px rgba(23,27,36,.2)}
+[data-theme="light"] .chips button{background:rgba(255,255,255,.65);border-color:rgba(23,27,36,.12);color:var(--muted)}
+[data-theme="light"] .chips button.on{background:#1b202b;color:#fff}
+[data-theme="light"] .person .face{border-color:rgba(23,27,36,.1)}
+[data-theme="light"] .ep{background:rgba(255,255,255,.55);border-color:rgba(23,27,36,.08)}
+[data-theme="light"] .ep:hover{background:rgba(23,27,36,.04)}
+[data-theme="light"] .overlay{background:rgba(245,246,248,.93)}
+[data-theme="light"] .searchbox input{background:rgba(255,255,255,.85);border-color:rgba(23,27,36,.15);color:var(--text)}
+[data-theme="light"] .searchbox input:focus{border-color:rgba(23,27,36,.45)}
+[data-theme="light"] .searchbox input::placeholder,[data-theme="light"] .box input::placeholder{color:var(--dim)}
+[data-theme="light"] .box{background:rgba(255,255,255,.95);border-color:rgba(23,27,36,.1);box-shadow:0 15px 50px rgba(23,27,36,.12)}
+[data-theme="light"] .box input{background:#f5f6f8;border-color:rgba(23,27,36,.15);color:var(--text)}
+[data-theme="light"] #codeMsg{color:#b72626!important}
+[data-theme="light"] #toast{background:rgba(255,255,255,.92);border-color:rgba(23,27,36,.12)}
+[data-theme="light"] .hero-link:focus-visible,[data-theme="light"] .cast-controls button:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
+/* Watching stays cinema-dark even while the surrounding website is in daylight mode. */
+#player{color:#f3f3f3;color-scheme:dark}
+[data-theme="light"] #player .pill.ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.14);box-shadow:0 4px 16px rgba(0,0,0,.25)}

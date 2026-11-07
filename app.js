@@ -920,7 +920,8 @@ function applyGlass() {
     const S = Math.round(bezel * 3.2);
     const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
     activeFilters.add(id);
-    el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
+    const light = document.documentElement.dataset.theme === 'light';
+    el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(${light ? 1.2 : 1.5}) brightness(${light ? 1.01 : 1.05})`;
   });
   // Bound resize history without removing filters still used by visible glass.
   for (const id of lensCache.keys()) {
@@ -928,6 +929,7 @@ function applyGlass() {
     if (!activeFilters.has(id)) { lensCache.delete(id); document.getElementById(id)?.remove(); }
   }
 }
+window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGlass));
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
