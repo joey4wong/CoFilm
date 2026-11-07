@@ -268,8 +268,8 @@ body{overflow-x:clip}
 /* Cast: a compact rail with the forward arrow beside the last visible portrait. */
 .cast-section > h2{margin-bottom:4px}
 .cast-shell{--cast-card-width:clamp(120px,10vw,170px);display:flex;align-items:flex-start;gap:16px;padding-inline:var(--pad)}
-.cast-shell .cast{flex:1;min-width:0;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x proximity}
-.cast .person{flex-basis:var(--cast-card-width);scroll-snap-align:start;min-width:0}
+.cast-shell .cast{flex:1;min-width:0;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
+.cast .person{flex-basis:var(--cast-card-width);scroll-snap-align:start;scroll-snap-stop:always;min-width:0}
 .person .face{object-fit:cover;background-color:#222}
 .person .n,.person .r{overflow-wrap:anywhere}
 .cast-next{display:inline-flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:999px;margin-top:calc(12px + var(--cast-card-width) * .625 - 19px)}

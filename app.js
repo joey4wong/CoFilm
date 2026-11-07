@@ -941,19 +941,53 @@ window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGl
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
-// ---------- Cast rail navigation ----------
+// ---------- Cast rail: whole portraits, whole-page steps ----------
+let castResizeObserver;
+function castStartIndex(list) {
+  if (!list?.children.length) return 0;
+  const span = Number(list.dataset.cardSpan) || list.firstElementChild.getBoundingClientRect().width + parseFloat(getComputedStyle(list).gap);
+  return Math.max(0, Math.round(list.scrollLeft / span));
+}
 function updateCastControls() {
   const section = $('.cast-section'), list = section?.querySelector('.cast');
   if (!list) return;
-  const next = section.querySelector('.cast-next');
-  next.hidden = list.scrollWidth <= list.clientWidth + 1;
-  next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+  section.querySelector('.cast-next').disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
 }
-function setupCastControls() {
-  $('.cast-section .cast')?.addEventListener('scroll', updateCastControls, { passive: true });
+function fitCastRail() {
+  const shell = $('.cast-shell'), list = shell?.querySelector('.cast');
+  if (!list?.children.length) return;
+  const next = shell.querySelector('.cast-next'), style = getComputedStyle(shell);
+  const total = list.children.length, gap = parseFloat(getComputedStyle(list).gap);
+  const fullWidth = shell.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const preferred = innerWidth <= 820 ? 112 : Math.min(170, Math.max(120, innerWidth * .1));
+  const arrowWidth = (innerWidth <= 600 ? 34 : 38) + parseFloat(style.gap);
+  let available = Math.max(1, Math.floor(fullWidth - arrowWidth));
+  let count = Math.max(1, Math.ceil((available + gap) / (preferred + gap)));
+  const showArrow = total > count;
+  if (!showArrow) { available = Math.max(1, Math.floor(fullWidth)); count = total; }
+  const width = Math.max(1, Math.floor(Math.min(preferred, (available - gap * (count - 1)) / count)));
+  const signature = [available, count, width, total, showArrow].join('|');
+  if (list.dataset.fitSignature === signature && list.dataset.restoreIndex === undefined) { updateCastControls(); return; }
+  const index = Number(list.dataset.restoreIndex ?? castStartIndex(list));
+  delete list.dataset.restoreIndex;
+  next.hidden = !showArrow;
+  list.style.flex = '0 0 ' + available + 'px'; list.style.width = available + 'px';
+  shell.style.setProperty('--cast-card-width', width + 'px');
+  list.dataset.pageSize = String(count); list.dataset.cardSpan = String(width + gap); list.dataset.fitSignature = signature;
+  list.scrollTo({ left: Math.min(index, Math.max(0, total - count)) * (width + gap), behavior: 'instant' });
   updateCastControls();
 }
-window.addEventListener('resize', updateCastControls);
+function setupCastControls() {
+  castResizeObserver?.disconnect();
+  const list = $('.cast-section .cast');
+  list?.addEventListener('scroll', updateCastControls, { passive: true });
+  fitCastRail();
+  if (list && typeof ResizeObserver !== 'undefined') {
+    castResizeObserver = new ResizeObserver(() => requestAnimationFrame(fitCastRail));
+    castResizeObserver.observe(list.closest('.cast-shell'));
+  }
+}
+window.addEventListener('resize', fitCastRail);
 
 // ---------- Related titles: finite, at most ten matching recommendations ----------
 function updateRecommendationControls() {
@@ -984,7 +1018,7 @@ function render() {
   const sig = location.hash;
   const keepScroll = sig === lastRoute;
   const y = scrollY;
-  const castX = keepScroll ? ($('.cast')?.scrollLeft || 0) : 0;
+  const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
   const recommendationX = keepScroll ? ($('.recommend-section .scroller')?.scrollLeft || 0) : 0;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
@@ -993,7 +1027,7 @@ function render() {
   else if (r.name === 'genres') html = viewGenres(r.arg);
   else html = viewHome();
   $('#view').innerHTML = html;
-  if (keepScroll && $('.cast')) $('.cast').scrollLeft = castX;
+  if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').scrollLeft = recommendationX;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
@@ -1103,9 +1137,9 @@ document.addEventListener('click', e => {
   const castScroll = t.closest('[data-cast-scroll]');
   if (castScroll) {
     const list = castScroll.closest('.cast-section').querySelector('.cast');
-    const span = list.querySelector('.person').offsetWidth + parseFloat(getComputedStyle(list).gap);
-    const step = span * Math.max(1, Math.floor(list.clientWidth / span));
-    list.scrollBy({ left: Number(castScroll.dataset.castScroll) * step, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    const count = Number(list.dataset.pageSize) || 1;
+    const index = Math.min(Math.max(0, list.children.length - count), castStartIndex(list) + count);
+    list.scrollTo({ left: index * Number(list.dataset.cardSpan), behavior: 'instant' });
     return;
   }
   const pl = t.closest('[data-play]');
