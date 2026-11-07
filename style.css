@@ -258,3 +258,27 @@ body{overflow-x:clip}
   .page .grid .card .sub{font-size:10.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .page .grid .card .q{top:6px;left:6px;font-size:9px;padding:1px 5px}
 }
+
+/* Cast: clear paging controls plus a full, wrapping list. */
+.cast-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 var(--pad) 6px}
+.cast-head h2{margin:0}
+.cast-controls{display:flex;align-items:center;gap:8px;flex:none}
+.cast-arrow,.cast-toggle{display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:999px}
+.cast-arrow{width:38px}
+.cast-toggle{padding:0 16px;font-size:13px;font-weight:500;white-space:nowrap}
+.cast-arrow:disabled{opacity:.3;cursor:default}
+.cast{scroll-snap-type:x proximity;scroll-padding-inline:var(--pad)}
+.cast .person{scroll-snap-align:start;min-width:0}
+.person .face{object-fit:cover;background-color:#222}
+.person .n,.person .r{overflow-wrap:anywhere}
+.cast-section.expanded .cast{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:26px 18px;overflow:visible}
+.cast-section.expanded .cast-arrow{display:none}
+.cast-controls button:focus-visible,.cast:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:4px}
+@media (max-width:600px){
+  .cast-controls{gap:6px}
+  .cast-arrow{width:34px;height:34px}
+  .cast-toggle{height:34px;padding:0 12px;font-size:12px}
+  .cast-section.expanded .cast{grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px}
+  .cast-section.expanded .person .n{font-size:12px}
+  .cast-section.expanded .person .r{font-size:10px;letter-spacing:.06em}
+}

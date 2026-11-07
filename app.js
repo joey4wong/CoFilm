@@ -700,7 +700,7 @@ const creditsPending = new Set();
 function creditsOf(it) {
   const id = it.meta?.id; if (!id) return null;
   const c = LS.get('tmdbc:' + id);
-  if (c && Date.now() - (c.t || 0) < 7 * 864e5) return c;
+  if (c?.v === 2 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
   const key = LS.get('tmdb:key');
   if (key && !creditsPending.has(id)) {
     creditsPending.add(id);
@@ -709,14 +709,17 @@ function creditsOf(it) {
         let hit, f = { movie_results: [], tv_results: [] };
         if (it.meta.tmdbId) { hit = { id: it.meta.tmdbId }; if (it.parsed.kind === 'series') f.tv_results = [hit]; else f.movie_results = [hit]; }
         else { f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json(); hit = (f.movie_results || [])[0] || (f.tv_results || [])[0]; }
-        if (!hit) { LS.set('tmdbc:' + id, { cast: [], crew: [], t: Date.now() }); return; }
+        if (!hit) { LS.set('tmdbc:' + id, { v: 2, cast: [], crew: [], t: Date.now() }); return; }
         const tv = !(f.movie_results || [])[0];
-        const cr = await (await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`)).json();
-        const cast = (cr.cast || []).slice(0, 20).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
-        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).slice(0, 3).map(p => ({ n: p.name, r: 'Director', p: p.profile_path }));
-        LS.set('tmdbc:' + id, { cast, crew, t: Date.now() });
+        const res = await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`);
+        if (!res.ok) throw new Error('Credits returned ' + res.status);
+        const cr = await res.json();
+        const cast = (cr.cast || []).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
+        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).map(p => ({ n: p.name, r: 'Director', p: p.profile_path }));
+        LS.set('tmdbc:' + id, { v: 2, cast, crew, t: Date.now() });
         if (location.hash.includes(enc(it.key))) render();
       } catch (e) { console.warn('tmdb', e); }
+      finally { creditsPending.delete(id); }
     })();
   }
   return c || null;
@@ -819,6 +822,7 @@ function trailerOf(it) {
   return null;
 }
 
+const expandedCast = new Set();
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
@@ -838,7 +842,7 @@ function viewDetail(key) {
   const similar = state.items.filter(x => x !== it && (x.meta?.genres || []).some(g => (m.genres || []).includes(g)))
     .map(x => ({ x, s: (x.meta.genres || []).filter(g => (m.genres || []).includes(g)).length })).sort((a, b) => b.s - a.s).slice(0, 15).map(o => o.x);
   const face = p => p.p
-    ? `<div class="face" style="background:#222 url('${TMDB_IMG}${esc(p.p)}') center/cover"></div>`
+    ? `<img class="face" loading="lazy" decoding="async" src="${TMDB_IMG}${esc(p.p)}" alt="${esc(p.n)}">`
     : `<div class="face" style="background:linear-gradient(160deg,hsl(${hue(p.n)} 35% 32%),hsl(${(hue(p.n) + 40) % 360} 30% 16%))">${esc(p.n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div>`;
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
   return `<div class="detail"><div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
@@ -854,7 +858,7 @@ function viewDetail(key) {
     </div>
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row"><h2>Cast</h2><div class="cast">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
+    ${people.length ? `<section class="row cast-section${expandedCast.has(key) ? ' expanded' : ''}"><div class="cast-head"><h2>Cast</h2><div class="cast-controls"><button class="cast-arrow lg" data-cast-scroll="-1" aria-label="Previous cast"><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-arrow lg" data-cast-scroll="1" aria-label="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button><button class="cast-toggle lg" data-cast-toggle="${esc(key)}" data-cast-count="${people.length}" aria-expanded="${expandedCast.has(key)}" aria-controls="cast-list">${expandedCast.has(key) ? 'Show less' : 'View all (' + people.length + ')'}</button></div></div><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
     ${row('More like this', similar)}
     <div style="height:40px"></div></div>`;
 }
@@ -926,6 +930,20 @@ function applyGlass() {
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
+// ---------- Cast navigation and full-grid view ----------
+function updateCastControls() {
+  const section = $('.cast-section'), list = section?.querySelector('.cast');
+  if (!list) return;
+  const full = section.classList.contains('expanded');
+  section.querySelector('[data-cast-scroll="-1"]').disabled = full || list.scrollLeft <= 1;
+  section.querySelector('[data-cast-scroll="1"]').disabled = full || list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+}
+function setupCastControls() {
+  $('.cast-section .cast')?.addEventListener('scroll', updateCastControls, { passive: true });
+  updateCastControls();
+}
+window.addEventListener('resize', updateCastControls);
+
 // ---------- router ----------
 function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
@@ -953,7 +971,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(applyGlass);
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
@@ -1034,6 +1052,24 @@ $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta
 // ---------- events ----------
 document.addEventListener('click', e => {
   const t = e.target;
+  const castToggle = t.closest('[data-cast-toggle]');
+  if (castToggle) {
+    const key = castToggle.dataset.castToggle, full = !expandedCast.has(key);
+    full ? expandedCast.add(key) : expandedCast.delete(key);
+    const section = castToggle.closest('.cast-section');
+    section.classList.toggle('expanded', full);
+    castToggle.setAttribute('aria-expanded', String(full));
+    castToggle.textContent = full ? 'Show less' : 'View all (' + castToggle.dataset.castCount + ')';
+    section.querySelector('.cast').scrollLeft = 0;
+    updateCastControls(); requestAnimationFrame(applyGlass); return;
+  }
+  const castScroll = t.closest('[data-cast-scroll]');
+  if (castScroll) {
+    const list = castScroll.closest('.cast-section').querySelector('.cast');
+    const step = Math.max(240, list.clientWidth - 2 * parseFloat(getComputedStyle(list).paddingLeft));
+    list.scrollBy({ left: Number(castScroll.dataset.castScroll) * step, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    return;
+  }
   const pl = t.closest('[data-play]');
   if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
   const pi = t.closest('[data-play-item]');
