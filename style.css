@@ -163,3 +163,6 @@ html.chromium .lg{backdrop-filter:url(#lg-distort) blur(3px) saturate(1.9) brigh
 .infobox.lg dt{color:rgba(255,255,255,.82);text-shadow:0 1px 6px rgba(0,0,0,.4)}
 .pill{box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 6px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.25);transition:transform .45s cubic-bezier(.34,1.56,.64,1)}
 .pill:hover{transform:scale(1.05)}
+
+/* icons hidden by request; settings opens automatically when no link is saved, or via #settings */
+#nav .sep,#nav .icon{display:none!important}

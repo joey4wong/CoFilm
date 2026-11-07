@@ -566,7 +566,7 @@ function showSlide(i) {
 }
 function startHero() { stopHero(); if (!hero.paused && hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
 function stopHero() { clearInterval(hero.timer); }
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); openSetup(); return; } render(); });
 
 // ---------- search ----------
 function renderSearch() {
@@ -635,5 +635,6 @@ if (/^#(link|tmdb)=/.test(location.hash)) {
   if (h.get('tmdb')) LS.set('tmdb:key', h.get('tmdb'));
   history.replaceState(null, '', location.pathname);
 }
+if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); setTimeout(openSetup, 0); }
 render();
 load();
