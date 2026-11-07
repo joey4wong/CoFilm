@@ -580,8 +580,8 @@ function applyGlass() {
     const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
     if (!W || !H) return;
     const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
-    const bezel = Math.max(10, Math.min(R, Math.min(W, H) * .32, 30));
-    const S = Math.round(bezel * 2.4);
+    const bezel = Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
+    const S = Math.round(bezel * 3.2);
     const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
