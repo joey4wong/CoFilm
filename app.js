@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=68';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=69';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -628,10 +628,10 @@ function card(it, opts = {}) {
 }
 function row(name, list, opts = {}) {
   if (!list.length) return '';
-  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-prev lg" data-recommend-prev aria-label="Previous recommendations" aria-controls="related-list" title="Previous recommendations" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
 
   const railId = 'home-row-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+  return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-prev lg" data-row-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
 
 }
 const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
@@ -885,7 +885,7 @@ function viewDetail(key) {
     </div>
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
+    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-prev lg" data-cast-scroll="-1" aria-label="Previous cast" aria-controls="cast-list" title="Previous cast" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
     ${row('More like this', similar, { advance: true, genre: primaryGenre })}
     <div style="height:40px"></div></div>`;
 }
@@ -969,6 +969,7 @@ function updateCastControls() {
   const section = $('.cast-section'), list = section?.querySelector('.cast');
   if (!list) return;
   section.querySelector('.cast-next').disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+  section.querySelector('.cast-prev').disabled = list.scrollLeft <= 1;
 }
 function fitCastRail() {
   const shell = $('.cast-shell'), list = shell?.querySelector('.cast');
@@ -987,7 +988,7 @@ function fitCastRail() {
   if (list.dataset.fitSignature === signature && list.dataset.restoreIndex === undefined) { updateCastControls(); return; }
   const index = Number(list.dataset.restoreIndex ?? castStartIndex(list));
   delete list.dataset.restoreIndex;
-  next.hidden = !showArrow;
+  next.hidden = !showArrow; shell.querySelector('.cast-prev').hidden = !showArrow;
   list.style.flex = '0 0 ' + available + 'px'; list.style.width = available + 'px';
   shell.style.setProperty('--cast-card-width', width + 'px');
   list.dataset.pageSize = String(count); list.dataset.cardSpan = String(width + gap); list.dataset.fitSignature = signature;
@@ -1033,9 +1034,10 @@ function fitPosterRail(list) {
 }
 function updateRecommendationControls() {
   document.querySelectorAll('.recommend-section,.browse-section').forEach(section => {
-    const list = section.querySelector('.scroller'), next = section.querySelector('[data-recommend-next],[data-row-next]');
+    const list = section.querySelector('.scroller'), next = section.querySelector('[data-recommend-next],[data-row-next]'), prev = section.querySelector('[data-recommend-prev],[data-row-prev]');
     if (list.dataset.railTargetIndex !== undefined && Math.abs(list.scrollLeft - Number(list.dataset.railTargetIndex) * Number(list.dataset.railSpan)) < 1) delete list.dataset.railTargetIndex;
-    next.hidden = list.scrollWidth <= list.clientWidth + 1;
+    next.hidden = prev.hidden = list.scrollWidth <= list.clientWidth + 1;
+    prev.disabled = list.scrollLeft <= 1;
     next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
   });
 }
@@ -1268,13 +1270,14 @@ document.addEventListener('click', e => {
     if (slide) { showSlide(+slide.dataset.slide); startHero(); }
     return; // The surrounding padding is a safe zone, never a movie link.
   }
-  const recommendNext = t.closest('[data-recommend-next],[data-row-next]');
+  const recommendNext = t.closest('[data-recommend-next],[data-row-next],[data-recommend-prev],[data-row-prev]');
   if (recommendNext) {
+    const dir = recommendNext.matches('[data-recommend-prev],[data-row-prev]') ? -1 : 1;
     e.preventDefault(); e.stopPropagation(); // Never activate the poster beneath the button.
     if (recommendNext.disabled || recommendNext.hidden) return;
     const list = recommendNext.closest('.recommend-section,.browse-section').querySelector('.scroller');
     const count = Number(list.dataset.railPageSize) || 1;
-    const index = Math.min(Math.max(0, list.children.length - count), posterRailIndex(list) + count);
+    const index = Math.min(Math.max(0, list.children.length - count), Math.max(0, posterRailIndex(list) + dir * count));
     list.dataset.railTargetIndex = String(index); // Preserve the requested page if metadata rerenders mid-animation.
     list.scrollTo({ left: index * Number(list.dataset.railSpan), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     return;
@@ -1283,7 +1286,9 @@ document.addEventListener('click', e => {
   if (castScroll) {
     const list = castScroll.closest('.cast-section').querySelector('.cast');
     const count = Number(list.dataset.pageSize) || 1;
-    const index = Math.min(Math.max(0, list.children.length - count), castStartIndex(list) + count);
+    const dir = Number(castScroll.dataset.castScroll) || 1;
+    if (castScroll.disabled) return;
+    const index = Math.min(Math.max(0, list.children.length - count), Math.max(0, castStartIndex(list) + dir * count));
     list.scrollTo({ left: index * Number(list.dataset.cardSpan), behavior: 'instant' });
     return;
   }
