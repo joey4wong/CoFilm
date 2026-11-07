@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=70';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=71';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -985,8 +985,8 @@ function fitCastRail() {
   const fullWidth = shell.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const preferred = innerWidth <= 820 ? 112 : Math.min(170, Math.max(120, innerWidth * .1));
   const touch = touchRails.matches;
-  const arrowWidth = touch ? 0 : (innerWidth <= 600 ? 34 : 38) + parseFloat(style.gap);
-  let available = Math.max(1, Math.floor(fullWidth - arrowWidth));
+  // Arrows overlay the portraits (like the poster rails), so they reserve no width.
+  let available = Math.max(1, Math.floor(fullWidth));
   let count = Math.max(1, Math.ceil((available + gap) / (preferred + gap)));
   const overflow = total > count;
   const showArrow = overflow && !touch;
