@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=81';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=82';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -19,16 +19,22 @@ function shareId(link) {
   const b64 = btoa(unescape(encodeURIComponent(link.trim())));
   return 'u!' + b64.replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
 }
+let tokenRequest = null;
 async function token(force) {
   const c = LS.get('od:token');
   if (!force && c && Date.parse(c.exp) - Date.now() > 3600e3) return c.token;
-  const r = await fetch('https://api-badgerp.svc.ms/v1.0/token', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: BADGER_APP }),
-  });
-  if (!r.ok) throw new Error('Could not get access token ' + r.status);
-  const j = await r.json();
-  LS.set('od:token', { token: j.token, exp: j.expiryTimeUtc });
-  return j.token;
+  // Share one request between callers (startup, unlock, listing) instead of racing several.
+  return tokenRequest ||= (async () => {
+    try {
+      const r = await fetch('https://api-badgerp.svc.ms/v1.0/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: BADGER_APP }),
+      });
+      if (!r.ok) throw new Error('Could not get access token ' + r.status);
+      const j = await r.json();
+      LS.set('od:token', { token: j.token, exp: j.expiryTimeUtc });
+      return j.token;
+    } finally { tokenRequest = null; }
+  })();
 }
 async function odGet(url, retry = true) {
   const r = await fetch(url, { headers: { Authorization: 'Badger ' + await token(), Prefer: 'autoredeem' } });
@@ -36,24 +42,35 @@ async function odGet(url, retry = true) {
   if (!r.ok) throw new Error('OneDrive returned ' + r.status);
   return r.json();
 }
-async function listAll(link) {
-  const sid = shareId(link);
+const FILE_FIELDS = 'id,name,size,createdDateTime,lastModifiedDateTime,file,folder,video,parentReference,@content.downloadUrl';
+async function walkShare(link, query) {
   const out = [];
   async function walk(url, path, depth) {
     let next = url;
     while (next) {
       const j = await odGet(next);
+      const sub = [];
       for (const c of j.value || []) {
         if (c.folder && depth < 4) {
           const d = c.parentReference?.driveId;
-          await walk(`${API}/drives/${d}/items/${c.id}/children?$top=500&$expand=thumbnails`, path.concat(c.name), depth + 1).catch(e => console.warn('subfolder read failed', c.name, e));
+          sub.push(walk(`${API}/drives/${d}/items/${c.id}/children?$top=500&${query}`, path.concat(c.name), depth + 1).catch(e => console.warn('subfolder read failed', c.name, e)));
         } else if (c.file) { c.__path = path; out.push(c); }
       }
+      await Promise.all(sub);                                   // read subfolders in parallel
       next = j['@odata.nextLink'];
     }
   }
-  await walk(`${API}/shares/${sid}/driveitem/children?$top=500&$expand=thumbnails&$select=id,name,size,createdDateTime,lastModifiedDateTime,file,folder,video,parentReference,@content.downloadUrl`, [], 0);
+  await walk(`${API}/shares/${shareId(link)}/driveitem/children?$top=500&${query}`, [], 0);
   return out;
+}
+// Building thumbnails makes OneDrive answer ~30% slower (measured median 1.07 s vs 0.73 s), and running both
+// requests at once makes them compete. So list first, show the library, then fetch the fallback stills.
+async function listAll(link) {
+  const files = await walkShare(link, '$select=' + FILE_FIELDS);
+  const thumbs = walkShare(link, '$expand=thumbnails($select=large,medium)&$select=id,file,folder,parentReference')
+    .then(list => new Map(list.map(f => [f.id, f.thumbnails?.[0]?.large?.url || f.thumbnails?.[0]?.medium?.url]).filter(x => x[1])));
+  thumbs.catch(() => {});
+  return { files, thumbs };
 }
 
 // ---------- metadata (Cinemeta, no API key) ----------
@@ -240,11 +257,12 @@ async function applyFiles(files, { refreshMetadata = true } = {}) {
   for (const it of state.items) {
     const { entry, fresh } = cachedMetadata(it.parsed);
     it.meta = old.has(it.key) ? old.get(it.key) : entry?.ok ? entry.m : null;
+    it.metaPending = refreshMetadata && !entry && !it.meta;   // first lookup still running: show the title, not a still
     if (!fresh) pending.push(it);
   }
   render(); // Show the cached library immediately; don't wait for metadata requests.
   if (refreshMetadata && pending.length) {
-    await pool(pending, 6, async it => { const m = await findMeta(it.parsed); if (m !== it.meta) { it.meta = m; scheduleRender(); } });
+    await pool(pending, 6, async it => { const m = await findMeta(it.parsed); const was = it.metaPending; it.metaPending = false; if (m !== it.meta || was) { it.meta = m; scheduleRender(); } });
     render();
   }
   applyErotic();
@@ -258,8 +276,16 @@ async function load(force) {
     const cached = LS.get('od:files');
     if (cached && !state.items.length && !force) await applyFiles(cached, { refreshMetadata: false });
     else if (!cached) toast('Loading OneDrive…');
-    const files = await listAll(link);
+    const { files, thumbs } = await listAll(link);
+    // Keep stills already known for these files until the fresh thumbnail request answers.
+    const known = new Map((cached || []).map(f => [f.id, f.thumbnails]));
+    for (const f of files) if (!f.thumbnails && known.get(f.id)) f.thumbnails = known.get(f.id);
     saveFiles(files);
+    thumbs.then(map => {
+      for (const f of files) { const u = map.get(f.id); if (u) f.thumbnails = [{ large: { url: u } }]; }
+      for (const it of state.items) for (const x of it.files) { const u = map.get(x.id); if (u) x.thumb = u; }
+      saveFiles(files); scheduleRender();
+    }).catch(e => console.warn('thumbnails', e));
     const added = await applyFiles(files);
     if (force || !cached) toast(`${state.items.length} titles`, 2500);
     else if (added > 0) toast(`${added} new title${added > 1 ? 's' : ''} added`, 4000);
@@ -605,8 +631,8 @@ const fmtTime = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Ma
 const fmtRuntime = r => { const n = parseInt(r, 10); if (!n) return r || ''; return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`; };
 const yearOf = it => String(it.meta?.year || it.parsed.year || '').slice(0, 4);
 const logoOf = it => it.meta?.id ? (it.meta.logo || `https://images.metahub.space/logo/medium/${it.meta.id}/img`) : '';
-const posterOf = it => it.meta?.id ? it.meta.poster : it.files[0].thumb;
-const bgOf = it => it.meta?.background || posterOf(it) || it.files[0].thumb || '';
+const posterOf = it => it.meta?.id ? it.meta.poster : it.metaPending ? '' : it.files[0].thumb;
+const bgOf = it => it.meta?.background || posterOf(it) || (it.metaPending ? '' : it.files[0].thumb) || '';
 const artCandidates = it => [...new Set([it.meta?.background, posterOf(it), it.files[0].thumb].filter(Boolean))];
 const enc = k => encodeURIComponent(k);
 function quality(f) {
@@ -1312,6 +1338,7 @@ async function unlockWithCode(raw) {
 }
 async function tryUnlock(code) {
   $('#codeMsg').textContent = 'Checking…';
+  token().catch(() => {});                                   // independent of the code; overlap with decryption
   try { await unlockWithCode(code); $('#codeMsg').textContent = ''; $('#setup').hidden = true; load(true); loadRatings(); }
   catch (e) { console.warn(e); $('#codeMsg').textContent = 'That code did not work. Please check it and try again.'; }
 }
