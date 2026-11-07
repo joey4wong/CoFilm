@@ -769,7 +769,7 @@ function renderSearch() {
       return { it, score };
     }).filter(Boolean).sort((a, b) => b.score - a.score).map(x => x.it);
   }
-  $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
+  $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0;padding:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
     (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
 }
 function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
