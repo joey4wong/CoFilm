@@ -823,7 +823,6 @@ function trailerOf(it) {
   return null;
 }
 
-const expandedCast = new Set();
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
@@ -859,7 +858,7 @@ function viewDetail(key) {
     </div>
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row cast-section${expandedCast.has(key) ? ' expanded' : ''}"><div class="cast-head"><h2>Cast</h2><div class="cast-controls"><button class="cast-arrow lg" data-cast-scroll="-1" aria-label="Previous cast"><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-arrow lg" data-cast-scroll="1" aria-label="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button><button class="cast-toggle lg" data-cast-toggle="${esc(key)}" data-cast-count="${people.length}" aria-expanded="${expandedCast.has(key)}" aria-controls="cast-list">${expandedCast.has(key) ? 'Show less' : 'View all (' + people.length + ')'}</button></div></div><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
+    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
     ${row('More like this', similar)}
     <div style="height:40px"></div></div>`;
 }
@@ -933,13 +932,13 @@ window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGl
 let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
-// ---------- Cast navigation and full-grid view ----------
+// ---------- Cast rail navigation ----------
 function updateCastControls() {
   const section = $('.cast-section'), list = section?.querySelector('.cast');
   if (!list) return;
-  const full = section.classList.contains('expanded');
-  section.querySelector('[data-cast-scroll="-1"]').disabled = full || list.scrollLeft <= 1;
-  section.querySelector('[data-cast-scroll="1"]').disabled = full || list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+  const next = section.querySelector('.cast-next');
+  next.hidden = list.scrollWidth <= list.clientWidth + 1;
+  next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
 }
 function setupCastControls() {
   $('.cast-section .cast')?.addEventListener('scroll', updateCastControls, { passive: true });
@@ -1058,21 +1057,11 @@ $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta
 // ---------- events ----------
 document.addEventListener('click', e => {
   const t = e.target;
-  const castToggle = t.closest('[data-cast-toggle]');
-  if (castToggle) {
-    const key = castToggle.dataset.castToggle, full = !expandedCast.has(key);
-    full ? expandedCast.add(key) : expandedCast.delete(key);
-    const section = castToggle.closest('.cast-section');
-    section.classList.toggle('expanded', full);
-    castToggle.setAttribute('aria-expanded', String(full));
-    castToggle.textContent = full ? 'Show less' : 'View all (' + castToggle.dataset.castCount + ')';
-    section.querySelector('.cast').scrollLeft = 0;
-    updateCastControls(); requestAnimationFrame(applyGlass); return;
-  }
   const castScroll = t.closest('[data-cast-scroll]');
   if (castScroll) {
     const list = castScroll.closest('.cast-section').querySelector('.cast');
-    const step = Math.max(240, list.clientWidth - 2 * parseFloat(getComputedStyle(list).paddingLeft));
+    const span = list.querySelector('.person').offsetWidth + parseFloat(getComputedStyle(list).gap);
+    const step = span * Math.max(1, Math.floor(list.clientWidth / span));
     list.scrollBy({ left: Number(castScroll.dataset.castScroll) * step, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     return;
   }
