@@ -233,6 +233,7 @@ async function applyFiles(files) {
   render();
   await pool(state.items, 6, async it => { const m = await findMeta(it.parsed); if (m !== it.meta) { it.meta = m; scheduleRender(); } });
   render();
+  applyErotic();
   return state.items.length - before;
 }
 async function load(force) {
@@ -576,6 +577,7 @@ async function loadRatings() {
     state.ratings = JSON.parse(new TextDecoder().decode(plain)).items || {};
     state.rHash = {};
     render();
+    applyErotic();
   } catch (e) { console.warn('ratings', e); }
 }
 async function ratingHash(id) {
@@ -589,6 +591,25 @@ function ratingsOf(it) {
   if (!(id in state.rHash)) { state.rHash[id] = null; ratingHash(id).then(h => { state.rHash[id] = h; if (location.hash.includes(enc(it.key))) render(); }); return null; }
   return state.rHash[id] ? state.ratings[state.rHash[id]] || null : null;
 }
+
+// ---------- Erotic genre: films flagged by the ratings job (Douban "erotic" genre or TMDB erotic/softcore tags)
+// plus manual overrides (overrides.json holds hashed IMDb IDs, so it does not reveal titles). Erotic films get only this one genre.
+let overrides = null;
+async function applyErotic() {
+  if (!state.ratings) return;
+  if (!overrides) { try { overrides = await (await fetch('overrides.json?t=' + Date.now(), { cache: 'no-store' })).json(); } catch { overrides = {}; } }
+  const add = new Set(overrides.erotic || []), remove = new Set(overrides.notErotic || []);
+  let changed = false;
+  for (const it of state.items) {
+    const m = it.meta; if (!m || !/^tt/.test(m.id || '')) continue;
+    const h = await ratingHash(m.id);
+    const ero = !remove.has(h) && (add.has(h) || !!state.ratings[h]?.ero);
+    if (ero && !(m.genres.length === 1 && m.genres[0] === 'Erotic')) { it.meta = { ...m, origGenres: m.origGenres || m.genres, genres: ['Erotic'] }; changed = true; }
+    if (!ero && m.origGenres) { it.meta = { ...m, genres: m.origGenres, origGenres: undefined }; changed = true; }
+  }
+  if (changed) render();
+}
+
 function ratingsHtml(it) {
   const m = it.meta || {}, r = ratingsOf(it) || {}, id = /^tt/.test(m.id || '') ? m.id : '';
   const q = encodeURIComponent(m.name || it.parsed.title);

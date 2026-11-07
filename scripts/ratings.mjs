@@ -81,8 +81,9 @@ async function tmdb(p) {
       if (s > bs) { bs = s; best = x; }
     }
     if (best && bs >= 1) {
-      const d = await (await get(`https://api.themoviedb.org/3/${type}/${best.id}?api_key=${TMDB}&append_to_response=external_ids`)).json();
-      return { imdb: d.external_ids?.imdb_id || d.imdb_id, title: d.title || d.name, orig: d.original_title || d.original_name, year: parseInt((d.release_date || d.first_air_date || '0').slice(0, 4), 10), tv };
+      const d = await (await get(`https://api.themoviedb.org/3/${type}/${best.id}?api_key=${TMDB}&append_to_response=external_ids,keywords`)).json();
+      const kw = (d.keywords?.keywords || d.keywords?.results || []).map(k => k.name.toLowerCase());
+      return { kw, imdb: d.external_ids?.imdb_id || d.imdb_id, title: d.title || d.name, orig: d.original_title || d.original_name, year: parseInt((d.release_date || d.first_air_date || '0').slice(0, 4), 10), tv };
     }
   }
   return null;
@@ -116,7 +117,7 @@ async function rtSearch(t) {
 }
 async function douban(id) {
   const j = await (await get(`https://m.douban.com/rexxar/api/v2/movie/${id}?ck=&for_mobile=1`, { headers: { Referer: `https://m.douban.com/movie/subject/${id}/`, 'User-Agent': MUA } })).json();
-  return { u: `https://movie.douban.com/subject/${id}/`, v: j.rating?.value ? String(j.rating.value) : null, n: j.rating?.count || 0 };
+  return { u: `https://movie.douban.com/subject/${id}/`, v: j.rating?.value ? String(j.rating.value) : null, n: j.rating?.count || 0, g: j.genres || [] };
 }
 async function doubanSearch(t) {
   for (const q of [t.title, t.orig].filter((x, i, a) => x && a.indexOf(x) === i)) {
@@ -151,8 +152,11 @@ for (const t of matched) {
       }
     }
   } catch (e) { console.warn('douban', t.title, e.message); out.db = old.db?.v ? old.db : (dbId ? { u: `https://movie.douban.com/subject/${dbId}/`, v: null } : old.db); }
+  // Erotic: Douban lists the genre, or TMDB tags it as an erotic / softcore film
+  const EROTIC_KW = ['erotic movie', 'softcore', 'erotica', 'sexploitation', 'erotic film'];
+  out.ero = !!((out.db?.g || []).includes('\u60c5\u8272') || (t.kw || []).some(k => EROTIC_KW.includes(k)) || old.ero && !out.db?.g);
   items[h] = out;
-  console.log(`${t.title} (${t.year}) IMDb ${out.imdb.v ?? '-'} | RT ${out.rt?.v ?? '-'} / ${out.rt?.a ?? '-'} | Douban ${out.db?.v ?? '-'}`);
+  console.log(`${out.ero ? '[EROTIC] ' : ''}${t.title} (${t.year}) IMDb ${out.imdb.v ?? '-'} | RT ${out.rt?.v ?? '-'} / ${out.rt?.a ?? '-'} | Douban ${out.db?.v ?? '-'}`);
   await sleep(1500);
 }
 for (const [h, v] of Object.entries(prev)) if (!items[h]) items[h] = v; // keep old entries if a lookup failed
