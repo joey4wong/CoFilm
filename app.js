@@ -635,7 +635,7 @@ function card(it, opts = {}) {
   const pr = progressOf(it), f = it.files[0], q = quality(f);
   const img = opts.wide ? bgOf(it) : posterOf(it);
   const pct = pr && pr.d ? pr.t / pr.d * 100 : 0;
-  return `<a class="card" href="#/t/${enc(it.key)}">
+  return `<a class="card" href="#/t/${enc(it.key)}"${opts.related ? ` data-genres="${esc(JSON.stringify(it.meta?.genres || []))}" title="${esc(title(it) + ' · ' + (it.meta?.genres || []).join(', '))}"` : ''}>
     <div class="pos"><div class="ph">${opts.wide ? '' : esc(title(it))}</div>${img ? `<img loading="lazy" src="${esc(img)}" alt="${esc(title(it))}" data-fb="${esc(f.thumb || '')}" onerror="if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.remove()}">` : ''}
       ${q ? `<span class="q">${q}</span>` : ''}
       ${pct > 1 ? `<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>` : ''}</div>
@@ -643,6 +643,8 @@ function card(it, opts = {}) {
 }
 function row(name, list, opts = {}) {
   if (!list.length) return '';
+  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+
   return `<section class="row ${opts.wide ? 'wide' : ''}"><h2>${esc(name)}</h2><div class="scroller">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div></section>`;
 }
 const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
@@ -839,8 +841,15 @@ function viewDetail(key) {
     ? [...cr.crew, ...cr.cast]
     : [...(m.director || []).map(n => ({ n, r: 'Director' })), ...(m.cast || []).map(n => ({ n, r: '' }))];
   const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-  const similar = state.items.filter(x => x !== it && (x.meta?.genres || []).some(g => (m.genres || []).includes(g)))
-    .map(x => ({ x, s: (x.meta.genres || []).filter(g => (m.genres || []).includes(g)).length })).sort((a, b) => b.s - a.s).slice(0, 15).map(o => o.x);
+  const primaryGenre = (m.genres || [])[0];
+  const similar = primaryGenre ? state.items
+    .filter(x => x !== it && x.parsed.kind === it.parsed.kind && (!m.id || x.meta?.id !== m.id) && (x.meta?.genres || [])[0] === primaryGenre)
+    .map(x => {
+      const shared = x.meta.genres.filter(g => m.genres.includes(g)).length;
+      return { x, shared, overlap: shared / new Set([...m.genres, ...x.meta.genres]).size };
+    })
+    .sort((a, b) => b.shared - a.shared || b.overlap - a.overlap || (parseFloat(b.x.meta.rating) || 0) - (parseFloat(a.x.meta.rating) || 0) || b.x.added - a.x.added)
+    .slice(0, 10).map(o => o.x) : [];
   const face = p => p.p
     ? `<img class="face" loading="lazy" decoding="async" src="${TMDB_IMG}${esc(p.p)}" alt="${esc(p.n)}">`
     : `<div class="face" style="background:linear-gradient(160deg,hsl(${hue(p.n)} 35% 32%),hsl(${(hue(p.n) + 40) % 360} 30% 16%))">${esc(p.n.split(' ').map(w => w[0]).slice(0, 2).join(''))}</div>`;
@@ -859,7 +868,7 @@ function viewDetail(key) {
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
     ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
-    ${row('More like this', similar)}
+    ${row('More like this', similar, { advance: true, genre: primaryGenre })}
     <div style="height:40px"></div></div>`;
 }
 
@@ -946,6 +955,20 @@ function setupCastControls() {
 }
 window.addEventListener('resize', updateCastControls);
 
+// ---------- Related titles: finite, at most ten matching recommendations ----------
+function updateRecommendationControls() {
+  const section = $('.recommend-section'), list = section?.querySelector('.scroller');
+  if (!list) return;
+  const next = section.querySelector('.recommend-next');
+  next.hidden = list.scrollWidth <= list.clientWidth + 1;
+  next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+}
+function setupRecommendationControls() {
+  $('.recommend-section .scroller')?.addEventListener('scroll', updateRecommendationControls, { passive: true });
+  updateRecommendationControls();
+}
+window.addEventListener('resize', updateRecommendationControls);
+
 // ---------- router ----------
 function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
@@ -962,6 +985,7 @@ function render() {
   const keepScroll = sig === lastRoute;
   const y = scrollY;
   const castX = keepScroll ? ($('.cast')?.scrollLeft || 0) : 0;
+  const recommendationX = keepScroll ? ($('.recommend-section .scroller')?.scrollLeft || 0) : 0;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
@@ -970,12 +994,13 @@ function render() {
   else html = viewHome();
   $('#view').innerHTML = html;
   if (keepScroll && $('.cast')) $('.cast').scrollLeft = castX;
+  if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').scrollLeft = recommendationX;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
@@ -1059,6 +1084,13 @@ $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta
 // ---------- events ----------
 document.addEventListener('click', e => {
   const t = e.target;
+  const recommendNext = t.closest('[data-recommend-next]');
+  if (recommendNext) {
+    const list = recommendNext.closest('.recommend-section').querySelector('.scroller');
+    const span = list.querySelector('.card').offsetWidth + parseFloat(getComputedStyle(list).gap);
+    list.scrollBy({ left: span * Math.max(1, Math.floor(list.clientWidth / span)), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    return;
+  }
   const castScroll = t.closest('[data-cast-scroll]');
   if (castScroll) {
     const list = castScroll.closest('.cast-section').querySelector('.cast');
