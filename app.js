@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=75';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=76';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -673,11 +673,6 @@ function viewHome() {
   if (hero.idx >= hero.list.length) hero.idx = 0;
   const cw = items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).map(x => x.it);
   const rated = items.filter(it => parseFloat(it.meta?.rating) >= 7).sort((a, b) => parseFloat(b.meta.rating) - parseFloat(a.meta.rating));
-  const gcount = new Map();
-  for (const it of items) for (const g of it.meta?.genres || []) gcount.set(g, (gcount.get(g) || 0) + 1);
-  const genres = [...gcount.entries()].filter(x => x[1] >= 3).sort((a, b) => b[1] - a[1]).slice(0, 6).map(x => x[0]);
-  const shows = items.filter(it => it.parsed.kind === 'series');
-  const classics = items.filter(it => parseInt(yearOf(it), 10) && parseInt(yearOf(it), 10) < 2000).sort((a, b) => yearOf(a) - yearOf(b));
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
       <div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
       <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
@@ -690,9 +685,6 @@ function viewHome() {
       ${row('Continue watching', cw, { wide: true, caption: it => { const p = progressOf(it); return `${fmtTime(p.d - p.t)} left`; } })}
       ${row('Recently added', byAdded.slice(0, 20))}
       ${row('Top rated', rated)}
-      ${row('Shows', shows)}
-      ${genres.map(g => row(g, items.filter(it => it.meta?.genres?.includes(g)))).join('')}
-      ${row('Classics', classics)}
       ${!items.length ? '<p class="empty">No titles loaded yet.</p>' : ''}
     </div>`;
 }
