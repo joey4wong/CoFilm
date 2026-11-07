@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=82';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=83';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -270,7 +270,7 @@ async function applyFiles(files, { refreshMetadata = true } = {}) {
 }
 async function load(force) {
   const link = LS.get('od:link');
-  if (!link) { openSetup(); return; }
+  if (!link) { if (!autoUnlock) openSetup(); return; }
   if (loading) return; loading = true;
   try {
     const cached = LS.get('od:files');
@@ -1414,9 +1414,19 @@ document.addEventListener('keydown', e => {
 
 // link via URL hash (#link=...) for quick setup on a new device
 const urlCode = new URLSearchParams(location.search).get('code') || new URLSearchParams(location.hash.slice(1)).get('code');
+// A shared link with ?code= opens straight into the library: unlock quietly, ask only if the code is wrong.
+let autoUnlock = null;
 if (urlCode) {
-  history.replaceState(null, '', location.pathname);
-  if (!LS.get('od:link')) setTimeout(() => { openSetup(); $('#codeInput').value = urlCode; tryUnlock(urlCode); }, 0);
+  const route = location.hash.startsWith('#/') ? location.hash : '';      // keep a shared film/page link
+  history.replaceState(null, '', location.pathname + route);
+  if (!LS.get('od:link')) {
+    toast('Loading…');
+    token().catch(() => {});                                               // overlap with the key derivation
+    autoUnlock = unlockWithCode(urlCode)
+      .then(() => { load(true); loadRatings(); })
+      .catch(e => { console.warn(e); toast(''); $('#toast').hidden = true; openSetup(); $('#codeInput').value = urlCode; $('#codeMsg').textContent = 'That code did not work. Please check it and try again.'; })
+      .finally(() => { autoUnlock = null; });
+  }
 }
 if (/^#(link|tmdb)=/.test(location.hash)) {
   const h = new URLSearchParams(location.hash.slice(1));
