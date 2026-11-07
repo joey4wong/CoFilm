@@ -1047,7 +1047,7 @@ function layoutLightArtwork() {
   }
   if (detail) {
     detail.classList.toggle('art-light', light);
-    if (!light) { detail.style.removeProperty('--art-height'); detail.style.removeProperty('--art-fade'); detail.style.removeProperty('--infobox-top'); }
+    if (!light) { detail.style.removeProperty('--art-height'); detail.style.removeProperty('--art-fade'); }
     else {
       const cta = detail.querySelector('.dleft .pill'), info = detail.querySelector('.infobox');
       if (cta) {
@@ -1057,10 +1057,6 @@ function layoutLightArtwork() {
         const height = solid + fade;   // solid part ends exactly at the PLAY button
         detail.style.setProperty('--art-fade', fade + 'px');
         detail.style.setProperty('--art-height', height + 'px');
-        if (info && innerWidth > 1100) {
-          const naturalTop = Math.round(info.getBoundingClientRect().top - base - (parseFloat(getComputedStyle(info).marginTop) || 0));
-          detail.style.setProperty('--infobox-top', Math.max(0, height + 18 - naturalTop) + 'px');
-        } else detail.style.removeProperty('--infobox-top');
       }
     }
   }
