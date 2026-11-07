@@ -27,4 +27,12 @@ jobs:
           git config user.name "cofilm-bot"
           git config user.email "actions@users.noreply.github.com"
           git add ratings.enc.json
-          git diff --cached --quiet || (git commit -m "Update ratings" && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "Update ratings"
+          # Site commits may land while the job runs. Only this bot edits the ratings file, so rebasing is safe.
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "Could not push the updated ratings after 4 attempts" >&2
+          exit 1
