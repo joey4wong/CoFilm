@@ -319,7 +319,7 @@ body{overflow-x:clip}
 
 /* Same-genre recommendations: a finite poster rail with the arrow on its right. */
 .recommend-shell,.browse-shell{--rail-card-width:clamp(128px,11.5vw,200px);--rail-center:.75;position:relative;padding-inline:var(--pad)}
-.recommend-shell .scroller,.browse-shell .scroller{width:100%;min-width:0;overflow-x:hidden;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
+.recommend-shell .scroller,.browse-shell .scroller{width:100%;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
 .recommend-next,.browse-next{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:calc(var(--pad) + 10px);top:calc(12px + var(--rail-card-width) * var(--rail-center));transform:translateY(-50%);width:44px;height:44px;border-radius:999px;margin:0;z-index:4;color:#fff;touch-action:manipulation}
 .recommend-next[hidden],.browse-next[hidden]{display:none}
 .recommend-next:disabled,.browse-next:disabled{opacity:.3;cursor:default}

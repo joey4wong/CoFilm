@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=71';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=72';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -959,10 +959,18 @@ let glassT = 0;
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
 // ---------- Touch devices swipe rails directly; pointer devices keep the arrow buttons ----------
-const touchRails = matchMedia('(hover: none) and (pointer: coarse)');
-const syncTouchRails = () => document.documentElement.classList.toggle('touch-rails', touchRails.matches);
+// Treat phones as touch even if the browser misreports its pointer type (desktop-site mode, in-app browsers).
+const touchQuery = matchMedia('(hover: none), (pointer: coarse)');
+const isTouchRails = () => touchQuery.matches || innerWidth <= 600;
+const touchRails = { get matches() { return isTouchRails(); } };
+const syncTouchRails = () => {
+  const was = document.documentElement.classList.contains('touch-rails'), now = isTouchRails();
+  document.documentElement.classList.toggle('touch-rails', now);
+  if (was !== now) requestAnimationFrame(() => { fitCastRail(); fitPosterRails(); });
+};
 syncTouchRails();
-touchRails.addEventListener?.('change', () => { syncTouchRails(); requestAnimationFrame(() => { fitCastRail(); fitPosterRails(); }); });
+touchQuery.addEventListener?.('change', syncTouchRails);
+window.addEventListener('resize', syncTouchRails);
 
 // ---------- Cast rail: whole portraits, whole-page steps ----------
 let castResizeObserver;
