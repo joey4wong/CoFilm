@@ -307,6 +307,18 @@ class ODSource {
   async getSize() { return this.size; }
   getKey() { return 'od:' + this.f.id; }
   seek(o) { return o; } getPosition() { return 0; } close() { this.cache.clear(); this.closed = true; }
+  async readSmall(offset, length, retry = 0) {   // direct small range request (for scattered reads, bypasses the block cache)
+    try {
+      const r = await fetch(this.url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
+      if (r.status === 401 || r.status === 403 || r.status === 404) throw Object.assign(new Error('expired'), { expired: true });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.arrayBuffer();
+    } catch (e) {
+      if (retry >= 3 || this.closed) throw e;
+      if (e.expired && this.refresh) { const u = await this.refresh(); if (u) this.url = u; } else await new Promise(r => setTimeout(r, 400 * (retry + 1)));
+      return this.readSmall(offset, length, retry + 1);
+    }
+  }
   _slot(fn) {
     return new Promise((res, rej) => {
       const run = () => { this.inflight++; fn().then(res, rej).finally(() => { this.inflight--; const n = this.queue.shift(); if (n) n(); }); };
@@ -360,12 +372,100 @@ class ODSource {
   }
 }
 
+
+// ---------- Embedded MP4 subtitles (mov_text) ----------
+// In big MP4s the subtitle samples are interleaved across the whole file, which the player's own reader cannot
+// fetch efficiently over HTTP. We read the MP4 index, then fetch only the subtitle samples near the playback position.
+const LANGS = { eng: 'English', spa: 'Spanish', fra: 'French', fre: 'French', zho: 'Chinese', chi: 'Chinese', deu: 'German', ger: 'German', ita: 'Italian', jpn: 'Japanese', kor: 'Korean', por: 'Portuguese', rus: 'Russian', ara: 'Arabic', hin: 'Hindi', tha: 'Thai', nld: 'Dutch', dut: 'Dutch', swe: 'Swedish', tur: 'Turkish', pol: 'Polish', und: 'Subtitles' };
+async function readMp4Subtitles(src) {
+  const size = src.size, td = new TextDecoder();
+  const rd = async (o, l) => new DataView(await src.read(o, l));
+  let off = 0, moov = null;
+  while (off < size) {
+    const b = await rd(off, 16); let sz = b.getUint32(0); const ty = td.decode(new Uint8Array(b.buffer, 4, 4)); if (sz === 1) sz = Number(b.getBigUint64(8)); if (sz === 0) sz = size - off;
+    if (ty === 'moov') { moov = await rd(off, Math.min(sz, 64 * 1024 * 1024)); break; }
+    if (sz < 8) return [];
+    off += sz;
+  }
+  if (!moov) return [];
+  const u8 = new Uint8Array(moov.buffer), t4 = o => td.decode(u8.subarray(o, o + 4));
+  const kids = (s, e) => { const r = []; let p = s; while (p + 8 <= e) { let sz = moov.getUint32(p); const ty = t4(p + 4); let h = 8; if (sz === 1) { sz = Number(moov.getBigUint64(p + 8)); h = 16; } if (sz < 8) break; r.push({ ty, s: p + h, e: p + sz }); p += sz; } return r; };
+  const find = (n, ty) => kids(n.s, n.e).find(k => k.ty === ty);
+  const tracks = [];
+  for (const tk of kids(8, moov.byteLength).filter(k => k.ty === 'trak')) {
+    try {
+      const mdia = find(tk, 'mdia'), hdlr = find(mdia, 'hdlr'), htype = t4(hdlr.s + 8);
+      if (htype !== 'sbtl' && htype !== 'text' && htype !== 'subt') continue;
+      const mdhd = find(mdia, 'mdhd'), ver = moov.getUint8(mdhd.s);
+      const ts = ver === 1 ? moov.getUint32(mdhd.s + 20) : moov.getUint32(mdhd.s + 12);
+      const lp = moov.getUint16(ver === 1 ? mdhd.s + 32 : mdhd.s + 20);
+      const lang = String.fromCharCode(((lp >> 10) & 31) + 96, ((lp >> 5) & 31) + 96, (lp & 31) + 96);
+      const stbl = find(find(mdia, 'minf'), 'stbl'), stsd = find(stbl, 'stsd');
+      const fmt = t4(stsd.s + 12); if (fmt !== 'tx3g') continue;
+      const stts = find(stbl, 'stts'), stsc = find(stbl, 'stsc'), stsz = find(stbl, 'stsz'), stco = find(stbl, 'stco') || find(stbl, 'co64');
+      const n = moov.getUint32(stsz.s + 8), fixed = moov.getUint32(stsz.s + 4);
+      const sizes = new Array(n); for (let i = 0; i < n; i++) sizes[i] = fixed || moov.getUint32(stsz.s + 12 + i * 4);
+      const nc = moov.getUint32(stco.s + 4), is64 = stco.ty === 'co64';
+      const cho = i => is64 ? Number(moov.getBigUint64(stco.s + 8 + i * 8)) : moov.getUint32(stco.s + 8 + i * 4);
+      const ns = moov.getUint32(stsc.s + 4), sc = []; for (let i = 0; i < ns; i++) sc.push([moov.getUint32(stsc.s + 8 + i * 12), moov.getUint32(stsc.s + 12 + i * 12)]);
+      const offs = new Array(n); let si = 0;
+      for (let c = 0; c < nc && si < n; c++) {
+        let spc = 0; for (let k = 0; k < sc.length; k++) if (sc[k][0] <= c + 1) spc = sc[k][1];
+        let o = cho(c); for (let j = 0; j < spc && si < n; j++, si++) { offs[si] = o; o += sizes[si]; }
+      }
+      const ne = moov.getUint32(stts.s + 4), times = new Array(n), durs = new Array(n); let ti = 0, tt = 0;
+      for (let e = 0; e < ne; e++) { const cnt = moov.getUint32(stts.s + 8 + e * 8), d = moov.getUint32(stts.s + 12 + e * 8); for (let k = 0; k < cnt && ti < n; k++, ti++) { times[ti] = tt / ts; durs[ti] = d / ts; tt += d; } }
+      tracks.push({ lang, n, offs, sizes, times, durs, loaded: new Uint8Array(n) });
+    } catch (e) { console.warn('subtitle track parse', e); }
+  }
+  return tracks;
+}
+function startEmbeddedSubs(el, src, playToken) {
+  (async () => {
+    let tracks = [];
+    try { tracks = await readMp4Subtitles(src); } catch (e) { console.warn('embedded subs', e); return; }
+    if (!tracks.length || playToken.dead) return;
+    // one track per language (the first one); English first
+    const seen = new Set(), pick = [];
+    for (const t of tracks) if (!seen.has(t.lang)) { seen.add(t.lang); pick.push(t); }
+    pick.sort((a, b) => (a.lang === 'eng' ? 0 : 1) - (b.lang === 'eng' ? 0 : 1));
+    pick.forEach((t, i) => { t.label = LANGS[t.lang] || t.lang.toUpperCase(); t.first = i === 0; });
+    const td = new TextDecoder();
+    async function loadWindow(t, from, to) {
+      const idx = []; for (let i = 0; i < t.n; i++) if (!t.loaded[i] && t.times[i] >= from && t.times[i] <= to && t.sizes[i] > 2) idx.push(i);
+      if (!idx.length) return;
+      const cues = [];
+      let k = 0;
+      await Promise.all(Array.from({ length: 8 }, async () => {
+        while (k < idx.length && !playToken.dead) {
+          const i = idx[k++];
+          try {
+            const b = new Uint8Array(await src.readSmall(t.offs[i], t.sizes[i]));
+            const len = (b[0] << 8) | b[1];
+            if (len > 0) { const text = td.decode(b.subarray(2, 2 + len)).replace(/\r/g, '').trim(); if (text) cues.push({ start: t.times[i], end: t.times[i] + Math.max(t.durs[i], 1.2), text }); }
+            t.loaded[i] = 1;
+          } catch (e) { /* retried on the next pass */ }
+        }
+      }));
+      if (cues.length && !playToken.dead) {
+        cues.sort((a, b) => a.start - b.start);
+        try { el.appendSubtitleCues(cues, { lang: 'emb-' + t.lang + (t.first ? '' : ''), label: t.label, select: !playToken.external && t.first && !t.selectedOnce && (t.selectedOnce = true) }); } catch (e) { console.warn('append cues', e); }
+      }
+    }
+    while (!playToken.dead) {
+      const ct = el.currentTime || 0;
+      for (const t of pick) await loadWindow(t, Math.max(0, ct - 5), ct + 240);
+      await new Promise(r => setTimeout(r, 4000));
+    }
+  })();
+}
+
 // ---------- player ----------
 // The player engine is ~11 MB, so it is only downloaded when you press play (and warmed up after the page is idle).
 let playerLib = null;
 function loadPlayerLib() { return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player/dist/element.js'); }
 (window.requestIdleCallback || (f => setTimeout(f, 4000)))(() => setTimeout(loadPlayerLib, 3000));
-let player = null, saveTimer = 0, current = null;
+let player = null, saveTimer = 0, current = null, embTok = null;
 async function play(fileId, restart) {
   let it, f;
   for (const x of state.items) for (const y of x.files) if (y.id === fileId) { it = x; f = y; }
@@ -393,7 +493,11 @@ async function play(fileId, restart) {
   }
   const fileRef = f;
   wrap.appendChild(player);
-  player.sourceAdapter = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; });
+  const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; });
+  player.sourceAdapter = odSrc;
+  if (embTok) embTok.dead = true;
+  embTok = { dead: false, external: f.subs.length > 0 };
+  if (/\.(mp4|m4v|mov)$/i.test(f.name)) startEmbeddedSubs(player, odSrc, embTok);
   const saved = LS.get('pos:' + f.id);
   const startAt = !restart && saved && saved.t > 30 && saved.t < saved.d - 60 ? saved.t : 0;
   let seeked = false;
@@ -409,6 +513,7 @@ async function play(fileId, restart) {
   setTimeout(() => { trySeek(); player.play?.().catch(() => {}); }, 300);
 }
 function closePlayer() {
+  if (embTok) embTok.dead = true;
   if (player && current && player.duration && player.currentTime > 5) LS.set('pos:' + current.f.id, { t: player.currentTime, d: player.duration, at: Date.now() });
   clearInterval(saveTimer);
   try { player?.pause(); } catch {}
