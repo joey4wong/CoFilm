@@ -1043,7 +1043,10 @@ function layoutLightArtwork() {
     }
   }
 }
-window.addEventListener('cofilmthemechange', () => requestAnimationFrame(layoutLightArtwork));
+function settleLightArtwork() { requestAnimationFrame(layoutLightArtwork); setTimeout(layoutLightArtwork, 350); setTimeout(layoutLightArtwork, 1200); }
+document.fonts?.ready.then(settleLightArtwork);
+window.addEventListener('load', settleLightArtwork);
+window.addEventListener('cofilmthemechange', settleLightArtwork);
 window.addEventListener('resize', () => { clearTimeout(layoutLightArtwork._t); layoutLightArtwork._t = setTimeout(layoutLightArtwork, 120); });
 
 // ---------- router ----------
@@ -1077,7 +1080,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); layoutLightArtwork(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); settleLightArtwork(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
