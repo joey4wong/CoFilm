@@ -47,8 +47,6 @@ main{min-height:100vh}
 .dots{position:absolute;right:var(--pad);bottom:17%;z-index:3;display:flex;align-items:center;gap:10px}
 .dots button{width:26px;height:4px;border-radius:4px;background:rgba(255,255,255,.35);transition:.3s}
 .dots button.on{width:70px;background:#fff}
-.dots .pp{width:auto;height:auto;background:none;margin-right:10px}
-.dots .pp svg{fill:#fff;stroke:none;width:20px;height:20px}
 /* rows */
 .rows{position:relative;z-index:2;margin-top:-120px;padding-bottom:80px}
 .page{padding:130px 0 80px}

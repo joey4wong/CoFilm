@@ -648,7 +648,7 @@ function row(name, list, opts = {}) {
 const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
 
 // ---------- views ----------
-const hero = { idx: 0, timer: 0, paused: false, list: [] };
+const hero = { idx: 0, timer: 0, list: [] };
 function viewHome() {
   const items = state.items;
   const byAdded = [...items].sort((a, b) => b.added - a.added);
@@ -668,7 +668,7 @@ function viewHome() {
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
         </div></div></div>`).join('');
   return `${hero.list.length ? `<section class="hero">${slides}
-      <div class="dots"><button class="pp" id="heroPause" aria-label="Pause slideshow">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
+      <div class="dots">${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
     <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
       ${row('Continue watching', cw, { wide: true, caption: it => { const p = progressOf(it); return `${fmtTime(p.d - p.t)} left`; } })}
       ${row('Recently added', byAdded.slice(0, 20))}
@@ -984,7 +984,7 @@ function showSlide(i) {
   document.querySelectorAll('.dots [data-slide]').forEach(d => d.classList.toggle('on', +d.dataset.slide === hero.idx));
   setAmbient(bgOf(hero.list[hero.idx]));
 }
-function startHero() { stopHero(); if (!hero.paused && hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
+function startHero() { stopHero(); if (hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
 function stopHero() { clearInterval(hero.timer); }
 window.addEventListener('hashchange', () => { if (location.hash === '#search') { history.replaceState(null, '', location.pathname + (lastRoute || '')); openSearch(); return; } if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); openSetup(); return; } render(); });
 
@@ -1080,7 +1080,6 @@ document.addEventListener('click', e => {
   if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
   const sl = t.closest('[data-slide]');
   if (sl) { showSlide(+sl.dataset.slide); startHero(); return; }
-  if (t.closest('#heroPause')) { hero.paused = !hero.paused; t.closest('#heroPause').innerHTML = hero.paused ? I.play : I.pause; hero.paused ? stopHero() : startHero(); return; }
   const g = t.closest('[data-genre]');
   if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
