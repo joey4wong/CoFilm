@@ -488,6 +488,52 @@ function creditsOf(it) {
   }
   return c || null;
 }
+
+// ---------- external ratings (IMDb / Rotten Tomatoes / Douban), fetched by a GitHub Action, encrypted ----------
+let ratingsKey = null;
+async function rKey() {
+  if (ratingsKey) return ratingsKey;
+  const link = LS.get('od:link'); if (!link) return null;
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('cofilm-ratings:' + link.trim()));
+  ratingsKey = {
+    aes: await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']),
+    hmac: await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']),
+  };
+  return ratingsKey;
+}
+async function loadRatings() {
+  try {
+    const k = await rKey(); if (!k) return;
+    const f = await (await fetch('ratings.enc.json?t=' + Date.now(), { cache: 'no-store' })).json();
+    const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(f.iv) }, k.aes, b(f.data));
+    state.ratings = JSON.parse(new TextDecoder().decode(plain)).items || {};
+    state.rHash = {};
+    render();
+  } catch (e) { console.warn('ratings', e); }
+}
+async function ratingHash(id) {
+  const k = await rKey(); if (!k) return null;
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k.hmac, new TextEncoder().encode(id)));
+  return [...sig].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+function ratingsOf(it) {
+  const id = it.meta?.id; if (!id || !/^tt/.test(id) || !state.ratings) return null;
+  if (!state.rHash) state.rHash = {};
+  if (!(id in state.rHash)) { state.rHash[id] = null; ratingHash(id).then(h => { state.rHash[id] = h; if (location.hash.includes(enc(it.key))) render(); }); return null; }
+  return state.rHash[id] ? state.ratings[state.rHash[id]] || null : null;
+}
+function ratingsHtml(it) {
+  const m = it.meta || {}, r = ratingsOf(it) || {}, id = /^tt/.test(m.id || '') ? m.id : '';
+  const q = encodeURIComponent(m.name || it.parsed.title);
+  const imdbU = r.imdb?.u || (id ? `https://www.imdb.com/title/${id}/` : `https://www.imdb.com/find/?q=${q}`);
+  const imdbV = r.imdb?.v || m.rating;
+  const rtU = r.rt?.u || `https://www.rottentomatoes.com/search?search=${q}`;
+  const dbU = r.db?.u || `https://search.douban.com/movie/subject_search?search_text=${id || q}`;
+  const a = (cls, label, val, url, sub) => `<a class="rate ${cls}" href="${esc(url)}" target="_blank" rel="noopener"><i>${label}</i><span>${esc(val || '–')}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</a>`;
+  return `<div class="rates">${a('imdb', 'IMDb', imdbV ? imdbV + '/10' : '', imdbU)}${a('rt', 'Rotten Tomatoes', r.rt?.v || '', rtU, r.rt?.a ? 'Audience ' + r.rt.a : '')}${a('db', 'Douban', r.db?.v ? r.db.v + '/10' : '', dbU)}</div>`;
+}
+
 function viewDetail(key) {
   const it = state.items.find(x => x.key === key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
@@ -496,7 +542,7 @@ function viewDetail(key) {
   const resume = pr && pr.t > 30 && pr.t < pr.d - 60;
   const infos = [
     ['Type', isS ? 'Series' : 'Film'], ['Released', m.year || it.parsed.year], ['Runtime', fmtRuntime(m.runtime)], ['Genres', (m.genres || []).join(', ')],
-    ['Rating', m.rating ? `${m.rating} / 10` : ''], ['Director', (m.director || []).join(', ')], ['Cast', (m.cast || []).slice(0, 4).join(', ')], ['Country', m.country],
+    ['Ratings', '__RATINGS__'], ['Director', (m.director || []).join(', ')], ['Cast', (m.cast || []).slice(0, 4).join(', ')], ['Country', m.country],
   ].filter(x => x[1]);
   const epName = (s, e) => (m.videos || []).find(x => x.s === s && x.e === e) || {};
   const cr = creditsOf(it);
@@ -522,7 +568,7 @@ function viewDetail(key) {
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
-    <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div></div>
+    <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
     ${people.length ? `<section class="row"><h2>Cast</h2><div class="cast">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
     ${row('More like this', similar)}
@@ -646,7 +692,7 @@ $('#saveLink').onclick = () => {
   const v = $('#linkInput').value.trim();
   if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com|.*sharepoint\.com)/.test(v)) { alert('That does not look like a OneDrive share link'); return; }
   const k = $('#tmdbInput').value.trim(); if (k) LS.set('tmdb:key', k); else LS.del('tmdb:key');
-  LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; load(true);
+  LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
 $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
@@ -699,3 +745,4 @@ if (/^#(link|tmdb)=/.test(location.hash)) {
 if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); setTimeout(openSetup, 0); }
 render();
 load();
+loadRatings();
