@@ -1048,11 +1048,37 @@ function layoutLightArtwork() {
     });
   }
 }
-function settleLightArtwork() { requestAnimationFrame(layoutLightArtwork); setTimeout(layoutLightArtwork, 350); setTimeout(layoutLightArtwork, 1200); }
+function settleLightArtwork() { const update = () => { layoutLightArtwork(); updateNavContrast(); }; requestAnimationFrame(update); setTimeout(update, 350); setTimeout(update, 1200); }
 document.fonts?.ready.then(settleLightArtwork);
 window.addEventListener('load', settleLightArtwork);
 window.addEventListener('cofilmthemechange', settleLightArtwork);
 window.addEventListener('resize', () => { clearTimeout(layoutLightArtwork._t); layoutLightArtwork._t = setTimeout(layoutLightArtwork, 120); });
+
+// ---------- Navigation text contrast: image area versus light page ----------
+function updateNavContrast() {
+  const nav = $('#nav'); if (!nav) return;
+  const nr = nav.getBoundingClientRect(), y = nr.top + nr.height / 2;
+  const art = $('.slide.on .bg') || $('.detail > .bg');
+  let onArt = false;
+  if (art && !art.classList.contains('art-missing')) {
+    const r = art.getBoundingClientRect();
+    let bottom = r.bottom;
+    if (document.documentElement.dataset.theme === 'light') {
+      const style = getComputedStyle(art), solid = parseFloat(style.getPropertyValue('--art-solid')), end = parseFloat(style.getPropertyValue('--art-end'));
+      if (Number.isFinite(solid) && Number.isFinite(end)) bottom = r.top + solid + (end - solid) * .7;
+    }
+    onArt = y >= r.top && y < bottom;
+  }
+  nav.classList.toggle('nav-on-art', onArt);
+}
+let navContrastFrame = 0;
+function scheduleNavContrast() {
+  if (navContrastFrame) return;
+  navContrastFrame = requestAnimationFrame(() => { navContrastFrame = 0; updateNavContrast(); });
+}
+window.addEventListener('scroll', scheduleNavContrast, { passive: true });
+window.addEventListener('resize', scheduleNavContrast);
+window.addEventListener('cofilmthemechange', scheduleNavContrast);
 
 // ---------- router ----------
 function routeInfo() {
@@ -1085,7 +1111,7 @@ function render() {
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); updateNavContrast(); });
 }
 function showSlide(i) {
   if (!hero.list.length) return;
@@ -1094,7 +1120,7 @@ function showSlide(i) {
     const active = +s.dataset.i === hero.idx;
     s.classList.toggle('on', active); s.inert = !active; s.setAttribute('aria-hidden', String(!active));
   });
-  requestAnimationFrame(layoutLightArtwork);
+  requestAnimationFrame(() => { layoutLightArtwork(); updateNavContrast(); });
   document.querySelectorAll('.dots [data-slide]').forEach(d => {
     const active = +d.dataset.slide === hero.idx;
     d.classList.toggle('on', active); d.setAttribute('aria-current', String(active));
