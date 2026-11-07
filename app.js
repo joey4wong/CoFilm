@@ -875,8 +875,8 @@ function viewDetail(key) {
       <div class="hbtns">
         ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
               : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
-        ${resume && !isS ? `<span class="duo lg"><button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button></span>` : ''}
-        ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="pill ghost trailer" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener">${I.yt}TRAILER</a>` : ''; })()}
+        ${resume && !isS ? `<button class="glass-action restart lg" data-play="${esc(f.id)}" data-restart aria-label="Start over" title="Start over">${I.restart}</button>` : ''}
+        ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="glass-action trailer lg" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener">${I.yt}TRAILER</a>` : ''; })()}
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
@@ -1085,7 +1085,8 @@ function layoutLightArtwork() {
       for (const prop of ['--art-solid','--art-mid1','--art-mid2','--art-end']) bg.style.removeProperty(prop);
       if (!light) return;
       const slide = bg.closest('.slide');
-      const cta = slide ? slide.querySelector('[data-play-item]') : root.querySelector('.dleft .pill');
+      // Include wrapped secondary actions so glass buttons never straddle the image fade.
+      const cta = slide ? slide.querySelector('[data-play-item]') : root.querySelector('.dleft .hbtns');
       if (!cta) return;
       const base = root.getBoundingClientRect().top;
       const full = bg.offsetHeight;
