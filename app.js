@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=78';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=81';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -52,11 +52,10 @@ async function listAll(link) {
       next = j['@odata.nextLink'];
     }
   }
-  await walk(`${API}/shares/${sid}/driveitem/children?$top=500&$expand=thumbnails&$select=id,name,size,createdDateTime,lastModifiedDateTime,webUrl,file,folder,video,parentReference,@content.downloadUrl`, [], 0);
+  await walk(`${API}/shares/${sid}/driveitem/children?$top=500&$expand=thumbnails&$select=id,name,size,createdDateTime,lastModifiedDateTime,file,folder,video,parentReference,@content.downloadUrl`, [], 0);
   return out;
 }
 
-// ---------- filename parsing ----------
 // ---------- metadata (Cinemeta, no API key) ----------
 const TMDB_API = 'https://api.themoviedb.org/3';
 // Metadata requests must never turn a flaky network or a rate limit (HTTP 429) into "no such film".
@@ -109,10 +108,9 @@ function cachedMetadata(p) {
   return { entry, fresh: isFreshMeta(entry) };
 }
 async function findMeta(p) {
-  const ck = 'meta:' + p.kind + ':' + keyOf(p);
   const vk = metaKey(p), { entry: cached, fresh } = cachedMetadata(p);
   if (fresh) return cached.ok ? cached.m : null;
-  let m = null, failed = false;
+  let m = null;
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
     let id = manual, td = null;
@@ -126,7 +124,7 @@ async function findMeta(p) {
           if (hit) td = await tmdbLookup(p, key, hit.id);
         } else td = await tmdbLookup(p, key);
         if (td && !id) id = td.external_ids?.imdb_id || td.imdb_id || null;
-      } catch (e) { failed = true; console.warn('tmdb search', p.title, e); }
+      } catch (e) { console.warn('tmdb search', p.title, e); }
     }
     // 2) Cinemeta search as fallback when TMDB has nothing
     if (!id && !td) {
@@ -151,7 +149,7 @@ async function findMeta(p) {
     }
     // 3) details: Cinemeta (IMDb rating, logo, episodes) merged with TMDB (synopsis, poster, backdrop)
     let d = null;
-    if (id) { try { d = (await fetchJson(`${META}/meta/${p.kind}/${id}.json`)).meta; } catch { failed = true; } }
+    if (id) { try { d = (await fetchJson(`${META}/meta/${p.kind}/${id}.json`)).meta; } catch {} }
     if (d || td) {
       const T = td || {}, I = 'https://image.tmdb.org/t/p/';
       const tYear = (T.release_date || T.first_air_date || '').slice(0, 4);
@@ -171,10 +169,9 @@ async function findMeta(p) {
         logo: d?.logo || (id ? `https://images.metahub.space/logo/medium/${id}/img` : ''), writer: d?.writer || [], awards: d?.awards,
       };
     }
-  } catch (e) { failed = true; console.warn('meta', p.title, e); }
+  } catch (e) { console.warn('meta', p.title, e); }
   if (!m && cached?.ok) { LS.set(vk, { ...cached, t: Date.now() }); return cached.m; }
-  LS.set(vk, { ok: !!m, m, t: Date.now(), ...(m ? {} : { retry: failed ? 'soon' : 'later' }) });
-  LS.del(ck);
+  LS.set(vk, { ok: !!m, m, t: Date.now() });
   return m;
 }
 // A poster that fails to load triggers one fresh metadata lookup per title per visit.
@@ -212,7 +209,7 @@ function buildItems(files) {
   for (const v of vids) {
     const p = parseName(v.name);
     const k = p.kind + ':' + keyOf(p);
-    const file = { id: v.id, name: v.name, size: v.size, url: v['@content.downloadUrl'], web: v.webUrl, added: Date.parse(v.lastModifiedDateTime || v.createdDateTime),
+    const file = { id: v.id, name: v.name, size: v.size, url: v['@content.downloadUrl'], added: Date.parse(v.lastModifiedDateTime || v.createdDateTime),
       video: v.video, thumb: v.thumbnails?.[0]?.large?.url || v.thumbnails?.[0]?.medium?.url, subs: findSubs(v).map(s => ({ name: s.name, url: s['@content.downloadUrl'] })), s: p.season, e: p.episode };
     if (!map.has(k)) map.set(k, { key: k, parsed: p, files: [], added: 0 });
     const it = map.get(k);
@@ -225,7 +222,13 @@ function buildItems(files) {
 
 let loading = false;
 function saveFiles(files) {
-  LS.set('od:files', files.map(f => ({ id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'], webUrl: f.webUrl, createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime, video: f.video, file: f.file, thumbnails: f.thumbnails })));
+  const thumb = t => { const u = t?.large?.url || t?.medium?.url; return u ? [{ large: { url: u } }] : undefined; };
+  LS.set('od:files', files.map(f => ({
+    id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'],
+    createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime,
+    video: f.video && { width: f.video.width, height: f.video.height, fourCC: f.video.fourCC },
+    file: f.file && { mimeType: f.file.mimeType }, thumbnails: thumb(f.thumbnails?.[0]),
+  })));
   LS.set('od:listedAt', Date.now());
 }
 async function applyFiles(files, { refreshMetadata = true } = {}) {
@@ -992,7 +995,6 @@ const syncTouchRails = () => {
 };
 syncTouchRails();
 touchQuery.addEventListener?.('change', syncTouchRails);
-window.addEventListener('resize', syncTouchRails);
 
 // ---------- Cast rail: whole portraits, whole-page steps ----------
 let castResizeObserver;
@@ -1043,7 +1045,6 @@ function setupCastControls() {
     castResizeObserver.observe(list.closest('.cast-shell'));
   }
 }
-window.addEventListener('resize', fitCastRail);
 
 // ---------- Poster rails: full cards, with an independent overlay button ----------
 function posterRailIndex(list) {
@@ -1094,9 +1095,7 @@ function setupRecommendationControls() {
     lists.forEach(list => posterRailObserver.observe(list.parentElement));
   }
 }
-window.addEventListener('resize', fitPosterRails);
 
-// ---------- Daylight artwork: runs to the PLAY button, then fades to the page ----------
 // ---------- Artwork guard: fall back to poster, then a still from the file ----------
 const artChecked = new Map();
 function ensureArtwork() {
@@ -1177,7 +1176,6 @@ function scheduleNavContrast() {
   navContrastFrame = requestAnimationFrame(() => { navContrastFrame = 0; updateNavContrast(); });
 }
 window.addEventListener('scroll', scheduleNavContrast, { passive: true });
-window.addEventListener('resize', scheduleNavContrast);
 window.addEventListener('cofilmthemechange', scheduleNavContrast);
 
 // ---------- router ----------
@@ -1275,7 +1273,6 @@ function fitSearchGrid() {
   const count = Math.max(1, Math.round((available + gap) / (preferred + gap)));
   g.style.gridTemplateColumns = `repeat(${count}, ${(available - gap * (count - 1)) / count}px)`;
 }
-window.addEventListener('resize', () => requestAnimationFrame(fitSearchGrid));
 function renderSearch() {
   const words = fold($('#q').value).split(/\s+/).filter(Boolean);
   let list;
@@ -1331,6 +1328,13 @@ $('#saveLink').onclick = () => {
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
 $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+
+// ---------- resize: one layout pass per frame ----------
+let resizeFrame = 0;
+window.addEventListener('resize', () => {
+  if (resizeFrame) return;
+  resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; syncTouchRails(); fitCastRail(); fitPosterRails(); updateNavContrast(); fitSearchGrid(); });
+});
 
 // ---------- events ----------
 document.addEventListener('click', e => {

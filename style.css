@@ -236,7 +236,7 @@ body{overflow-x:clip}
   :is(.page,#search) .grid .card .q{top:6px;left:6px;font-size:9px;padding:1px 5px}
 }
 
-/* Cast: a compact rail with the forward arrow beside the last visible portrait. */
+/* Cast: a compact rail of whole portraits; arrows overlay the first and last visible portrait. */
 .cast-section > h2{margin-bottom:4px}
 .cast-shell{--cast-card-width:clamp(120px,10vw,170px);display:flex;align-items:flex-start;gap:16px;padding-inline:var(--pad);position:relative}
 .cast-shell .cast{flex:1;min-width:0;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
