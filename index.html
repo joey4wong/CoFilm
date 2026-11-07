@@ -11,12 +11,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <script type="module" src="https://cdn.jsdelivr.net/npm/movi-player/dist/element.js"></script>
 </head>
 <body>
 <div id="ambient"></div>
-<nav id="nav" aria-label="Main">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="lg-distort" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.006 0.009" numOctaves="2" seed="7" result="noise"/>
+    <feGaussianBlur in="noise" stdDeviation="2.5" result="soft"/>
+    <feDisplacementMap in="SourceGraphic" in2="soft" scale="42" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+<script>if (navigator.userAgentData && navigator.userAgentData.brands.some(b => /Chromium/.test(b.brand))) document.documentElement.classList.add('chromium');</script>
+<nav id="nav" class="lg" aria-label="Main">
   <a href="#/" data-route="home">Home</a>
   <a href="#/movies" data-route="movies">Movies</a>
   <a href="#/shows" data-route="shows">Shows</a>
@@ -54,6 +62,6 @@
     <button id="clearCache" class="pill ghost small">Clear metadata cache</button>
   </div>
 </div>
-<script type="module" src="app.js?v=8"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>

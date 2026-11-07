@@ -430,7 +430,7 @@ function viewHome() {
       <div class="bg" style="background-image:url('${esc(bgOf(it))}')"></div>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
-        <span class="duo"><a href="#/t/${enc(it.key)}" aria-label="Details">${I.info}</a></span></div></div></div>`).join('');
+        <span class="duo lg"><a href="#/t/${enc(it.key)}" aria-label="Details">${I.info}</a></span></div></div></div>`).join('');
   return `${hero.list.length ? `<section class="hero">${slides}
       <div class="dots"><button class="pp" id="heroPause" aria-label="Pause slideshow">${hero.paused ? I.play : I.pause}</button>${hero.list.map((_, i) => `<button data-slide="${i}" class="${i === hero.idx ? 'on' : ''}" aria-label="Slide ${i + 1}"></button>`).join('')}</div></section>` : '<div style="height:130px"></div>'}
     <div class="rows" ${hero.list.length ? '' : 'style="margin-top:0"'}>
@@ -516,13 +516,13 @@ function viewDetail(key) {
       <div class="hbtns">
         ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
               : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
-        <span class="duo">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button><i></i>` : ''}
+        <span class="duo lg">${resume && !isS ? `<button data-play="${esc(f.id)}" data-restart title="Start over">${I.restart}</button><i></i>` : ''}
           <a href="${esc(f.web)}" target="_blank" rel="noopener" title="Open in OneDrive">${I.od}</a><i></i>
           <button data-fix="${esc(it.key)}" title="Fix match">${I.fix}</button></span>
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
-    <div class="infobox"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div></div>
+    <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" data-play="${esc(x.id)}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
     ${people.length ? `<section class="row"><h2>Cast</h2><div class="cast">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div></section>` : ''}
     ${row('More like this', similar)}
