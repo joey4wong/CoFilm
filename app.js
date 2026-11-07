@@ -80,35 +80,76 @@ function parseName(name) {
 const keyOf = p => (p.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()) + '|' + (p.year || '');
 
 // ---------- metadata (Cinemeta, no API key) ----------
+const TMDB_API = 'https://api.themoviedb.org/3';
+const normT = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+const wordsT = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+function titleScore(name, t) {
+  if (normT(name) === normT(t)) return 100;
+  const tw = wordsT(t), xw = wordsT(name), ov = tw.filter(w => xw.includes(w)).length;
+  return ov + (xw[0] === tw[0] ? 0.5 : 0);
+}
+// TMDB search: returns full TMDB details (with external_ids) of the best match, or null
+async function tmdbLookup(p, key, tmdbId) {
+  const tv = p.kind === 'series', type = tv ? 'tv' : 'movie';
+  const get = async u => (await fetch(`${TMDB_API}${u}${u.includes('?') ? '&' : '?'}api_key=${key}`)).json();
+  if (!tmdbId) {
+    const yearParam = p.year ? (tv ? `&first_air_date_year=${p.year}` : `&year=${p.year}`) : '';
+    const tries = [p.title]; if (/^the /i.test(p.title)) tries.push(p.title.slice(4));
+    for (const t of tries) {
+      for (const yp of p.year ? [yearParam, ''] : ['']) {
+        const j = await get(`/search/${type}?query=${encodeURIComponent(t)}${yp}`);
+        let best = null, bs = 0;
+        for (const x of j.results || []) {
+          const nm = x.title || x.name, on = x.original_title || x.original_name;
+          const y = parseInt((x.release_date || x.first_air_date || '0').slice(0, 4), 10);
+          const dy = p.year && y ? Math.abs(y - p.year) : 0;
+          if (p.year && y && dy > 1) continue;
+          const s = Math.max(titleScore(nm, t), titleScore(on, t)) - dy * 0.3 + Math.min(x.popularity || 0, 50) / 100 + (x.poster_path ? 0.2 : 0);
+          if (s > bs) { bs = s; best = x; }
+        }
+        if (best && bs >= 1) { tmdbId = best.id; break; }
+      }
+      if (tmdbId) break;
+    }
+  }
+  if (!tmdbId) return null;
+  return get(`/${type}/${tmdbId}?append_to_response=external_ids`);
+}
 async function findMeta(p) {
   const ck = 'meta:' + p.kind + ':' + keyOf(p);
-  const cached = LS.get(ck);
+  const vk = 'meta3:' + p.kind + ':' + keyOf(p);
+  const cached = LS.get(vk);
   const age = cached ? Date.now() - cached.t : Infinity;
   if (cached && (cached.ok ? age < 7 * 864e5 : age < 3 * 864e5)) return cached.ok ? cached.m : null;
   let m = null;
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
-    let id = manual;
-    if (!id) {
+    let id = manual, td = null;
+    const key = LS.get('tmdb:key');
+    // 1) TMDB first (more accurate matching), unless a manual IMDb fix exists
+    if (key) {
+      try {
+        if (manual) {
+          const f = await (await fetch(`${TMDB_API}/find/${manual}?api_key=${key}&external_source=imdb_id`)).json();
+          const hit = (p.kind === 'series' ? f.tv_results : f.movie_results)?.[0];
+          if (hit) td = await tmdbLookup(p, key, hit.id);
+        } else td = await tmdbLookup(p, key);
+        if (td && !id) id = td.external_ids?.imdb_id || td.imdb_id || null;
+      } catch (e) { console.warn('tmdb search', p.title, e); }
+    }
+    // 2) Cinemeta search as fallback when TMDB has nothing
+    if (!id && !td) {
       const tries = [p.title];
       if (/^the /i.test(p.title)) tries.push(p.title.slice(4));
       for (const t of tries) {
         const j = await (await fetch(`${META}/catalog/${p.kind}/top/search=${encodeURIComponent(t)}.json`)).json();
         const list = j.metas || [];
         const yr = x => parseInt(x.releaseInfo || x.year || '0', 10);
-        const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
-        const words = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
-        const tw = words(t);
-        const score = x => {
-          if (norm(x.name) === norm(t)) return 100;
-          const xw = words(x.name), ov = tw.filter(w => xw.includes(w)).length;
-          return ov + (xw[0] === tw[0] ? 0.5 : 0);
-        };
         let hit = null, best = 0;
         for (const x of list) {
           const dy = p.year ? Math.abs(yr(x) - p.year) : 0;
           if (dy > 1) continue;
-          const s = score(x) - dy * 0.3;
+          const s = titleScore(x.name, t) - dy * 0.3;
           if (s > best) { best = s; hit = x; }
         }
         if (hit && best < 1) hit = null;
@@ -117,19 +158,31 @@ async function findMeta(p) {
         if (hit) { id = hit.imdb_id || hit.id; break; }
       }
     }
-    if (id) {
-      const d = (await (await fetch(`${META}/meta/${p.kind}/${id}.json`)).json()).meta;
-      if (d) m = {
-        id, name: d.name, year: d.releaseInfo || d.year, desc: d.description, rating: d.imdbRating,
-        genres: d.genres || d.genre || [], cast: d.cast || [], director: d.director || [], runtime: d.runtime,
-        poster: `https://images.metahub.space/poster/medium/${id}/img`, background: d.background, country: d.country,
-        videos: (d.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title, thumb: v.thumbnail, desc: v.overview || v.description })),
-        logo: d.logo, writer: d.writer || [], awards: d.awards,
+    // 3) details: Cinemeta (IMDb rating, logo, episodes) merged with TMDB (synopsis, poster, backdrop)
+    let d = null;
+    if (id) { try { d = (await (await fetch(`${META}/meta/${p.kind}/${id}.json`)).json()).meta; } catch {} }
+    if (d || td) {
+      const T = td || {}, I = 'https://image.tmdb.org/t/p/';
+      const tYear = (T.release_date || T.first_air_date || '').slice(0, 4);
+      const tRun = T.runtime || T.episode_run_time?.[0];
+      m = {
+        id: id || ('tmdb' + T.id), tmdbId: T.id || d?.moviedb_id,
+        name: T.title || T.name || d?.name, year: tYear || d?.releaseInfo || d?.year,
+        desc: T.overview || d?.description,
+        rating: d?.imdbRating || (T.vote_average ? T.vote_average.toFixed(1) : ''),
+        genres: (T.genres || []).map(g => g.name.replace('Science Fiction', 'Sci-Fi')).filter(Boolean).length ? T.genres.map(g => g.name.replace('Science Fiction', 'Sci-Fi')) : (d?.genres || d?.genre || []),
+        cast: d?.cast || [], director: d?.director || (T.created_by || []).map(c => c.name), runtime: tRun ? tRun + ' min' : d?.runtime,
+        poster: T.poster_path ? I + 'w500' + T.poster_path : (id ? `https://images.metahub.space/poster/medium/${id}/img` : ''),
+        background: T.backdrop_path ? I + 'w1280' + T.backdrop_path : d?.background,
+        country: (T.production_countries || []).map(c => c.name).join(', ') || d?.country,
+        videos: (d?.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title, thumb: v.thumbnail, desc: v.overview || v.description })),
+        logo: d?.logo || (id ? `https://images.metahub.space/logo/medium/${id}/img` : ''), writer: d?.writer || [], awards: d?.awards,
       };
     }
   } catch (e) { console.warn('meta', p.title, e); }
-  if (!m && cached?.ok) { LS.set(ck, { ...cached, t: Date.now() }); return cached.m; }
-  LS.set(ck, { ok: !!m, m, t: Date.now() });
+  if (!m && cached?.ok) { LS.set(vk, { ...cached, t: Date.now() }); return cached.m; }
+  LS.set(vk, { ok: !!m, m, t: Date.now() });
+  LS.del(ck);
   return m;
 }
 async function pool(arr, n, fn) {
@@ -420,8 +473,9 @@ function creditsOf(it) {
     creditsPending.add(id);
     (async () => {
       try {
-        const f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json();
-        const hit = (f.movie_results || [])[0] || (f.tv_results || [])[0];
+        let hit, f = { movie_results: [], tv_results: [] };
+        if (it.meta.tmdbId) { hit = { id: it.meta.tmdbId }; if (it.parsed.kind === 'series') f.tv_results = [hit]; else f.movie_results = [hit]; }
+        else { f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json(); hit = (f.movie_results || [])[0] || (f.tv_results || [])[0]; }
         if (!hit) { LS.set('tmdbc:' + id, { cast: [], crew: [], t: Date.now() }); return; }
         const tv = !(f.movie_results || [])[0];
         const cr = await (await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`)).json();
@@ -534,7 +588,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; load(true);
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => k.startsWith('meta:') || k.startsWith('tmdbc:')).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta3?|tmdbc):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 $('#settingsBtn').onclick = openSetup;
 $('#refresh').onclick = () => load(true);
 
@@ -558,11 +612,11 @@ document.addEventListener('click', e => {
     const v = prompt('Enter an IMDb ID (e.g. tt0274812) or the correct English title:', it.meta?.id || it.parsed.title);
     if (!v) return;
     const ck = it.parsed.kind + ':' + keyOf(it.parsed);
-    LS.del('meta:' + ck);
+    LS.del('meta3:' + ck);
     const isId = /^tt\d+$/.test(v.trim());
     if (isId) LS.set('fix:' + ck, v.trim()); else LS.del('fix:' + ck);
     const p2 = isId ? it.parsed : { ...it.parsed, title: v.trim() };
-    findMeta(p2).then(m => { if (m) { LS.set('fix:' + ck, m.id); LS.set('meta:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? 'Matched: ' + m.name : 'Still no match', 3000); });
+    findMeta(p2).then(m => { if (m) { if (/^tt/.test(m.id)) LS.set('fix:' + ck, m.id); else LS.del('fix:' + ck); LS.set('meta3:' + ck, { ok: true, m, t: Date.now() }); } it.meta = m; render(); toast(m ? 'Matched: ' + m.name : 'Still no match', 3000); });
   }
 });
 $('#pclose').onclick = closePlayer;
