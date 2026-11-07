@@ -44,10 +44,10 @@ main{min-height:100vh}
 .tag.gray{background:rgba(255,255,255,.18)}
 .desc{font-size:17px;line-height:1.65;color:rgba(255,255,255,.92);text-shadow:0 1px 8px rgba(0,0,0,.4);margin:0 0 30px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .hbtns{display:flex;gap:16px;align-items:center}
-.dots{position:absolute;right:calc(var(--pad) - 16px);bottom:calc(17% - 32px);z-index:3;display:flex;align-items:center;gap:0;padding:12px 16px;border-radius:18px;background:rgba(12,14,22,.12);backdrop-filter:blur(1px);pointer-events:auto;touch-action:manipulation;user-select:none;isolation:isolate}
+.dots{position:absolute;right:calc(var(--pad) - 16px);bottom:calc(17% - 32px);z-index:3;display:flex;align-items:center;gap:0;padding:12px 16px;background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;pointer-events:auto;touch-action:manipulation;user-select:none}
 .dots::after{content:"";position:absolute;inset:-8px;z-index:-1;pointer-events:auto;background:transparent}
 .dots button{display:flex;align-items:center;justify-content:center;flex:0 0 64px;width:64px;height:44px;padding:0;border-radius:10px;background:transparent;touch-action:manipulation}
-.dots button::before{content:"";display:block;width:26px;height:4px;border-radius:4px;background:rgba(255,255,255,.35);pointer-events:none;transition:width .3s,background-color .3s}
+.dots button::before{content:"";display:block;width:26px;height:4px;border-radius:4px;background:rgba(255,255,255,.35);pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));transition:width .3s,background-color .3s}
 .dots button.on::before{width:52px;background:#fff}
 .dots button:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 /* rows */
@@ -124,7 +124,7 @@ main{min-height:100vh}
   .hcontent{bottom:72px;right:var(--pad)}
   .logo{max-height:120px;margin-bottom:14px}
   .desc{font-size:15px;-webkit-line-clamp:3;margin-bottom:20px}
-  .dots{bottom:0;left:8px;right:8px;max-width:360px;padding:8px;gap:0}
+  .dots{bottom:0;left:8px;right:8px;max-width:360px;padding:8px;gap:0;background:none}
   .dots button{flex:1 1 0;width:auto;min-width:0}
   .dots button::before{width:16px;max-width:calc(100% - 8px)}
   .dots button.on::before{width:40px}
@@ -309,7 +309,6 @@ body{overflow-x:clip}
 [data-theme="light"] .pill.ghost svg{fill:none}
 [data-theme="light"] .duo button,[data-theme="light"] .duo a{color:var(--text)}
 [data-theme="light"] .duo.lg i{background:rgba(23,27,36,.2)}
-[data-theme="light"] .dots{background:rgba(255,255,255,.2)}
 [data-theme="light"] .dots button::before{background:rgba(23,27,36,.3)}
 [data-theme="light"] .dots button.on::before{background:#1b202b}
 [data-theme="light"] .card .pos{background:linear-gradient(135deg,#e0e3e9,#cbd1db);box-shadow:0 5px 16px rgba(23,27,36,.14);outline-color:rgba(23,27,36,.08)}
