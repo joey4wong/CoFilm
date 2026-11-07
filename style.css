@@ -319,17 +319,14 @@ body{overflow-x:clip}
 #player{color:#f3f3f3;color-scheme:dark}
 
 /* Same-genre recommendations: a finite poster rail with the arrow on its right. */
-.recommend-shell{--recommend-card-width:clamp(128px,11.5vw,200px);display:flex;align-items:flex-start;gap:16px;padding-inline:var(--pad)}
-.recommend-shell .scroller{flex:1;min-width:0;padding-inline:0;scroll-padding-inline:0}
-.recommend-next{display:inline-flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:999px;margin-top:calc(12px + var(--recommend-card-width) * .75 - 19px)}
+.recommend-shell{--rail-card-width:clamp(128px,11.5vw,200px);--rail-center:.75;position:relative;padding-inline:var(--pad)}
+.recommend-shell .scroller{width:100%;min-width:0;overflow-x:hidden;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
+.recommend-next{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:calc(var(--pad) + 10px);top:calc(12px + var(--rail-card-width) * var(--rail-center));transform:translateY(-50%);width:44px;height:44px;border-radius:999px;margin:0;z-index:4;color:#fff;touch-action:manipulation}
 .recommend-next[hidden]{display:none}
 .recommend-next:disabled{opacity:.3;cursor:default}
 .recommend-next:focus-visible,.recommend-section .scroller:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:4px}
 [data-theme="light"] .recommend-next:focus-visible,[data-theme="light"] .recommend-section .scroller:focus-visible{outline-color:#1b202b}
-@media(max-width:600px){
-  .recommend-shell{gap:10px}
-  .recommend-next{flex-basis:34px;width:34px;height:34px;margin-top:calc(12px + var(--recommend-card-width) * .75 - 17px)}
-}
+
 
 /* Paint-only daylight artwork: preserve dark-layout size, crop and placement. */
 [data-theme="light"] .slide::after{background:none}
@@ -343,21 +340,23 @@ body{overflow-x:clip}
 [data-theme="light"] #nav.nav-on-art a.on{color:#fff;background:rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 0 0 .5px rgba(255,255,255,.12)}
 
 /* Homepage rails share the same forward control and lens in either theme. */
-.browse-shell{--browse-card-width:clamp(128px,11.5vw,200px);--browse-center:.75;display:flex;align-items:flex-start;gap:16px;padding-inline:var(--pad)}
-.row.wide .browse-shell{--browse-card-width:clamp(240px,22vw,380px);--browse-center:.28125}
-.browse-shell .scroller{flex:1;min-width:0;padding-inline:0;scroll-padding-inline:0}
-.browse-next{display:inline-flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:999px;margin-top:calc(12px + var(--browse-card-width) * var(--browse-center) - 19px)}
+.browse-shell{--rail-card-width:clamp(128px,11.5vw,200px);--rail-center:.75;position:relative;padding-inline:var(--pad)}
+.row.wide .browse-shell{--rail-card-width:clamp(240px,22vw,380px);--rail-center:.28125}
+.browse-shell .scroller{width:100%;min-width:0;overflow-x:hidden;padding-inline:0;scroll-padding-inline:0;scroll-snap-type:x mandatory}
+.browse-next{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:calc(var(--pad) + 10px);top:calc(12px + var(--rail-card-width) * var(--rail-center));transform:translateY(-50%);width:44px;height:44px;border-radius:999px;margin:0;z-index:4;color:#fff;touch-action:manipulation}
 .browse-next[hidden]{display:none}
 .browse-next:disabled{opacity:.3;cursor:default}
 .browse-next:focus-visible,.browse-shell .scroller:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:4px}
 [data-theme="light"] .browse-next:focus-visible,[data-theme="light"] .browse-shell .scroller:focus-visible{outline-color:#1b202b}
 .person img.face{background:transparent;box-shadow:none;outline:0}
-@media(max-width:600px){
- .browse-shell{gap:10px}
- .browse-next{flex-basis:34px;width:34px;height:34px;margin-top:calc(12px + var(--browse-card-width) * var(--browse-center) - 17px)}
-}
+
 
 /* Missing portraits: a neutral silhouette, never initials. Paint only across themes. */
 .person .face.face-placeholder{background:#272c34;color:#79828f;overflow:hidden;box-shadow:none;outline:0}
 .person .face-placeholder svg{width:62%;height:62%;flex:none;fill:currentColor}
 [data-theme="light"] .person .face.face-placeholder{background:#e2e5e9;color:#a0a8b3}
+
+/* Buttons overlay real artwork, not a reserved gutter. Poster links stay separate. */
+.browse-shell .scroller > .card,.recommend-shell .scroller > .card{width:var(--rail-card-width)}
+.browse-shell .card:hover .pos,.recommend-shell .card:hover .pos{transform:none}
+.browse-next svg,.recommend-next svg{pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}

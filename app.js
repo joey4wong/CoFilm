@@ -644,7 +644,7 @@ function card(it, opts = {}) {
 }
 function row(name, list, opts = {}) {
   if (!list.length) return '';
-  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
 
   const railId = 'home-row-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
@@ -1003,21 +1003,55 @@ function setupCastControls() {
 }
 window.addEventListener('resize', fitCastRail);
 
-// ---------- Related titles: finite, at most ten matching recommendations ----------
+// ---------- Poster rails: full cards, with an independent overlay button ----------
+function posterRailIndex(list) {
+  if (!list?.firstElementChild) return 0;
+  if (list.dataset.railRestoreIndex !== undefined) return Number(list.dataset.railRestoreIndex);
+  if (list.dataset.railTargetIndex !== undefined) return Number(list.dataset.railTargetIndex);
+  const gap = parseFloat(getComputedStyle(list).gap) || 0;
+  const span = Number(list.dataset.railSpan) || list.firstElementChild.getBoundingClientRect().width + gap;
+  return Math.max(0, Math.round(list.scrollLeft / span));
+}
+function fitPosterRail(list) {
+  const shell = list.parentElement, available = list.clientWidth;
+  if (!list.firstElementChild || !available) return;
+  const gap = parseFloat(getComputedStyle(list).gap) || 0;
+  const wide = !!list.closest('.row.wide');
+  const preferred = wide ? Math.min(380, Math.max(240, innerWidth * .22)) : Math.min(200, Math.max(128, innerWidth * .115));
+  const count = Math.max(1, Math.round((available + gap) / (preferred + gap)));
+  const width = (available - gap * (count - 1)) / count;
+  const signature = [available, count, width, list.children.length].join('|');
+  if (list.dataset.railFit === signature && list.dataset.railRestoreIndex === undefined) return;
+  const index = Math.min(Number(list.dataset.railRestoreIndex ?? posterRailIndex(list)), Math.max(0, list.children.length - count));
+  delete list.dataset.railRestoreIndex; delete list.dataset.railTargetIndex;
+  shell.style.setProperty('--rail-card-width', width + 'px');
+  list.dataset.railPageSize = String(count); list.dataset.railSpan = String(width + gap); list.dataset.railFit = signature;
+  list.scrollTo({ left: index * (width + gap), behavior: 'instant' });
+}
 function updateRecommendationControls() {
   document.querySelectorAll('.recommend-section,.browse-section').forEach(section => {
     const list = section.querySelector('.scroller'), next = section.querySelector('[data-recommend-next],[data-row-next]');
-    const shell = list.parentElement, style = getComputedStyle(shell);
-    const fullWidth = shell.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    next.hidden = list.scrollWidth <= fullWidth + 1;
+    if (list.dataset.railTargetIndex !== undefined && Math.abs(list.scrollLeft - Number(list.dataset.railTargetIndex) * Number(list.dataset.railSpan)) < 1) delete list.dataset.railTargetIndex;
+    next.hidden = list.scrollWidth <= list.clientWidth + 1;
     next.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
   });
 }
-function setupRecommendationControls() {
-  document.querySelectorAll('.recommend-section .scroller,.browse-section .scroller').forEach(list => list.addEventListener('scroll', updateRecommendationControls, { passive: true }));
+function fitPosterRails() {
+  document.querySelectorAll('.recommend-section .scroller,.browse-section .scroller').forEach(fitPosterRail);
   updateRecommendationControls();
 }
-window.addEventListener('resize', updateRecommendationControls);
+let posterRailObserver;
+function setupRecommendationControls() {
+  posterRailObserver?.disconnect();
+  const lists = document.querySelectorAll('.recommend-section .scroller,.browse-section .scroller');
+  lists.forEach(list => list.addEventListener('scroll', updateRecommendationControls, { passive: true }));
+  fitPosterRails();
+  if (typeof ResizeObserver !== 'undefined') {
+    posterRailObserver = new ResizeObserver(fitPosterRails);
+    lists.forEach(list => posterRailObserver.observe(list.parentElement));
+  }
+}
+window.addEventListener('resize', fitPosterRails);
 
 // ---------- Daylight artwork: runs to the PLAY button, then fades to the page ----------
 // ---------- Artwork guard: fall back to poster, then a still from the file ----------
@@ -1112,8 +1146,8 @@ function render() {
   const keepScroll = sig === lastRoute;
   const y = scrollY;
   const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
-  const recommendationX = keepScroll ? ($('.recommend-section .scroller')?.scrollLeft || 0) : 0;
-  const browseScroll = keepScroll ? new Map([...document.querySelectorAll('.browse-section')].map(s => [s.dataset.rowKey, s.querySelector('.scroller').scrollLeft])) : null;
+  const recommendationIndex = keepScroll ? posterRailIndex($('.recommend-section .scroller')) : 0;
+  const browseScroll = keepScroll ? new Map([...document.querySelectorAll('.browse-section')].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
@@ -1122,8 +1156,8 @@ function render() {
   else html = viewHome();
   $('#view').innerHTML = html;
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
-  if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').scrollLeft = recommendationX;
-  if (browseScroll) document.querySelectorAll('.browse-section').forEach(s => { s.querySelector('.scroller').scrollLeft = browseScroll.get(s.dataset.rowKey) || 0; });
+  if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').dataset.railRestoreIndex = String(recommendationIndex);
+  if (browseScroll) document.querySelectorAll('.browse-section').forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(browseScroll.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
@@ -1225,9 +1259,13 @@ document.addEventListener('click', e => {
   }
   const recommendNext = t.closest('[data-recommend-next],[data-row-next]');
   if (recommendNext) {
+    e.preventDefault(); e.stopPropagation(); // Never activate the poster beneath the button.
+    if (recommendNext.disabled || recommendNext.hidden) return;
     const list = recommendNext.closest('.recommend-section,.browse-section').querySelector('.scroller');
-    const span = list.querySelector('.card').offsetWidth + parseFloat(getComputedStyle(list).gap);
-    list.scrollBy({ left: span * Math.max(1, Math.floor(list.clientWidth / span)), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    const count = Number(list.dataset.railPageSize) || 1;
+    const index = Math.min(Math.max(0, list.children.length - count), posterRailIndex(list) + count);
+    list.dataset.railTargetIndex = String(index); // Preserve the requested page if metadata rerenders mid-animation.
+    list.scrollTo({ left: index * Number(list.dataset.railSpan), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     return;
   }
   const castScroll = t.closest('[data-cast-scroll]');
