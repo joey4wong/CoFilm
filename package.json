@@ -1,0 +1,9 @@
+{
+  "name": "cofilm",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test scripts/*.test.mjs"
+  }
+}

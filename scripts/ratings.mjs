@@ -1,8 +1,8 @@
 // Fetches IMDb / Rotten Tomatoes / Douban ratings for every title in the OneDrive folder
 // and writes them to ratings.enc.json, AES-GCM encrypted with a key derived from the OneDrive link.
 // Runs in GitHub Actions (server side), because RT and Douban block in-browser requests (CORS).
-import crypto from 'node:crypto';
-import fs from 'node:fs';
+import { createRatingsCrypto, readRatings, writeRatingsIfChanged } from './ratings-store.mjs';
+import { VIDEO_EXT, SUB_EXT, parseName } from '../lib/catalog.mjs';
 import { tscore, selectDoubanCandidate, doubanRecord } from './rating-match.mjs';
 
 const LINK = process.env.OD_LINK, TMDB = process.env.TMDB_KEY;
@@ -13,27 +13,24 @@ if ([...onlyImdb].some(id => !/^tt\d+$/.test(id))) throw Error('Invalid RATINGS_
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
 const MUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const get = async (url, opts = {}) => { const r = await fetch(url, { signal: AbortSignal.timeout(25000), ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) } }); if (!r.ok) { const u = new URL(url); throw new Error(r.status + ' ' + u.origin + u.pathname); } return r; }; // Never log API keys or private query strings
+const get = async (url, opts = {}) => { const r = await fetch(url, { signal: AbortSignal.timeout(25000), ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) } }); if (!r.ok) { const u = new URL(url); throw new Error(r.status + ' ' + u.hostname); } return r; }; // Never log API keys or private query strings
 
-// ---- crypto (must match app.js) ----
-const keyBytes = crypto.createHash('sha256').update('cofilm-ratings:' + LINK.trim()).digest();
-const hashId = id => crypto.createHmac('sha256', keyBytes).update(id).digest('hex').slice(0, 32);
-function encrypt(obj) {
-  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', keyBytes, iv);
-  const data = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final(), c.getAuthTag()]);
-  return { v: 1, iv: iv.toString('base64'), data: data.toString('base64') };
-}
-function decrypt(f) {
-  const buf = Buffer.from(f.data, 'base64'), iv = Buffer.from(f.iv, 'base64');
-  const d = crypto.createDecipheriv('aes-256-gcm', keyBytes, iv); d.setAuthTag(buf.subarray(buf.length - 16));
-  return JSON.parse(Buffer.concat([d.update(buf.subarray(0, buf.length - 16)), d.final()]).toString('utf8'));
-}
+// Read the old file before making requests. Bad keys/corrupt data must never become an empty cache.
+const codec = createRatingsCrypto(LINK), previous = readRatings(OUT, codec);
+const prev = previous.items, { hashId } = codec;
 
 // ---- OneDrive listing (same anonymous share API as the site) ----
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
 const sid = 'u!' + Buffer.from(LINK.trim()).toString('base64').replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
-const tok = (await (await fetch('https://api-badgerp.svc.ms/v1.0/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: '5cbed6ac-a083-4e14-b191-b4ba07653de2' }) })).json()).token;
-const od = async u => (await fetch(u, { headers: { Authorization: 'Badger ' + tok, Prefer: 'autoredeem' } })).json();
+const tok = (await (await get('https://api-badgerp.svc.ms/v1.0/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: '5cbed6ac-a083-4e14-b191-b4ba07653de2' }) })).json()).token;
+if (!tok) throw Error('OneDrive token response was invalid');
+const od = async u => {
+  const r = await fetch(u, { signal: AbortSignal.timeout(25000), headers: { Authorization: 'Badger ' + tok, Prefer: 'autoredeem' } });
+  if (!r.ok) throw Error('OneDrive returned ' + r.status); // Never log the private share URL.
+  const j = await r.json();
+  if (!Array.isArray(j.value)) throw Error('OneDrive returned an invalid folder listing');
+  return j;
+};
 const files = [];
 async function walk(url, depth) {
   let next = url;
@@ -49,23 +46,10 @@ async function walk(url, depth) {
 await walk(`${API}/shares/${sid}/driveitem/children?$top=500`, 0);
 
 // ---- filename parsing (copied from app.js) ----
-const VIDEO_EXT = /\.(mkv|mp4|m4v|mov|avi|ts|m2ts|webm|wmv|flv)$/i, SUB_EXT = /\.(srt|ass|ssa|vtt)$/i;
-const STRONG = /^(\d{3,4}p|blu-?ray|bdrip|brrip|web-?dl|webrip|web|hdtv|hdrip|dvdrip|uhd|4k|remux|hdr|hdr10\+?|dv|x26[45]|h\.?26[45]|hevc|avc|10bit|8bit|ddp?\d?(\.\d)?|aac\d?(\.\d)?|dts(-hd)?|truehd|atmos|cc|it|amzn|nf|ma)$/i;
-const EDITION = /^(unrated|extended|dubbed|repack|proper|imax|remastered|directors|cut|uncut|criterion|multi|dual|limited|internal|bluray)$/i;
-function parseName(name) {
-  let base = name.replace(/\.[a-z0-9]{2,4}$/i, m => (VIDEO_EXT.test(m) || SUB_EXT.test(m) ? '' : m));
-  base = base.replace(/\[[^\]]*\]/g, ' ').replace(/[\u4e00-\u9fff]+/g, ' ');
-  const ep = base.match(/^(.*?)[ ._-]+S(\d{1,2})[ ._-]?E(\d{1,3})/i);
-  if (ep) return { kind: 'series', title: ep[1].replace(/[._]+/g, ' ').trim(), year: null };
-  const t = base.split(/[ ._]+/).filter(Boolean);
-  let q = t.findIndex((x, i) => i > 0 && STRONG.test(x)); if (q < 0) q = t.length;
-  let y = -1; for (let i = 1; i < q; i++) if (/^(19|20)\d\d$/.test(t[i])) y = i;
-  const tt = (y > 0 ? t.slice(0, y) : t.slice(0, q)).filter((x, i) => i === 0 || !EDITION.test(x));
-  return { kind: 'movie', title: tt.join(' ').replace(/\s+-\s*$/, '').trim(), year: y > 0 ? +t[y] : null };
-}
 const vids = files.filter(f => VIDEO_EXT.test(f.name) || f.video || (f.size > 3e8 && !SUB_EXT.test(f.name)));
 const titles = new Map();
 for (const v of vids) { const p = parseName(v.name); titles.set(p.kind + '|' + p.title.toLowerCase() + '|' + (p.year || ''), p); }
+if (!files.length || !titles.size) throw Error('No video titles returned; previous ratings left untouched');
 console.log(`${files.length} files, ${titles.size} titles`);
 
 // ---- TMDB match (same scoring idea as app.js) ----
@@ -156,26 +140,24 @@ async function doubanSearch(t) {
 }
 
 // ---- run ----
-let prev = {};
-try { prev = decrypt(JSON.parse(fs.readFileSync(OUT, 'utf8'))).items || {}; } catch {}
 const matched = [];
-for (const p of titles.values()) { try { const m = await tmdb(p); if (m?.imdb && (!onlyImdb.size || onlyImdb.has(m.imdb))) matched.push(m); } catch (e) { console.warn('tmdb', p.title, e.message); } }
-if (onlyImdb.size && !matched.length) throw Error('No requested IMDb ID matched; keeping the previous rating file untouched');
+for (const p of titles.values()) { try { const m = await tmdb(p); if (m?.imdb && (!onlyImdb.size || onlyImdb.has(m.imdb))) matched.push(m); } catch (e) { console.warn('tmdb', e.message); } }
+if (!matched.length) throw Error('No IMDb IDs matched; keeping the previous rating file untouched');
 let wd = {}; try { wd = await wikidata(matched.map(m => m.imdb)); } catch (e) { console.warn('wikidata', e.message); }
 const items = {};
 for (const t of matched) {
   const h = hashId(t.imdb), old = prev[h] || {}, out = { imdb: { u: `https://www.imdb.com/title/${t.imdb}/`, v: old.imdb?.v || null } };
-  try { out.imdb.v = await imdbRating(t.imdb, t.tv) || out.imdb.v; } catch (e) { console.warn('imdb', t.title, e.message); }
+  try { out.imdb.v = await imdbRating(t.imdb, t.tv) || out.imdb.v; } catch (e) { console.warn('imdb', e.message); }
   try {
     const url = wd[t.imdb]?.rt ? `https://www.rottentomatoes.com/${wd[t.imdb].rt}` : (old.rt?.u || await rtSearch(t));
     if (url) out.rt = await rtFromPage(url);
-  } catch (e) { console.warn('rt', t.title, e.message); out.rt = old.rt; }
+  } catch (e) { console.warn('rt', e.message); out.rt = old.rt; }
   let dbId = null;
   try {
     dbId = wd[t.imdb]?.db || (old.db?.u || '').match(/subject\/(\d+)/)?.[1];
     if (!dbId) {
       // Retry with a small exact-ID query when the batch failed or omitted this title.
-      try { const one = await wikidata([t.imdb]); dbId = one[t.imdb]?.db; } catch (e) { console.warn('wikidata single', t.title, e.message); }
+      try { const one = await wikidata([t.imdb]); dbId = one[t.imdb]?.db; } catch (e) { console.warn('wikidata single', e.message); }
     }
     dbId ||= await doubanSearch(t);
     if (dbId) {
@@ -183,15 +165,15 @@ for (const t of matched) {
         try { out.db = await douban(dbId); break; } catch (e) { if (k === 2) throw e; await sleep(15000 * (k + 1)); }
       }
     }
-  } catch (e) { console.warn('douban', t.title, e.message); out.db = { ...(old.db || {}), ...(dbId ? { u: `https://movie.douban.com/subject/${dbId}/` } : {}), status: 'unavailable', attemptedAt: new Date().toISOString() }; // Keep any prior score/check time; failure is not an unrated subject.
+  } catch (e) { console.warn('douban', e.message); out.db = { ...(old.db || {}), ...(dbId ? { u: `https://movie.douban.com/subject/${dbId}/` } : {}), status: 'unavailable', attemptedAt: new Date().toISOString() }; // Keep any prior score/check time; failure is not an unrated subject.
   }
   // Erotic: Douban lists the genre, or TMDB tags it as an erotic / softcore film
   const EROTIC_KW = ['erotic movie', 'softcore', 'erotica', 'sexploitation', 'erotic film'];
   out.ero = !!((out.db?.g || []).includes('\u60c5\u8272') || (t.kw || []).some(k => EROTIC_KW.includes(k)) || old.ero && !out.db?.g);
   items[h] = out;
-  console.log(`${out.ero ? '[EROTIC] ' : ''}${t.title} (${t.year}) IMDb ${out.imdb.v ?? '-'} | RT ${out.rt?.v ?? '-'} / ${out.rt?.a ?? '-'} | Douban ${out.db?.v ?? '-'}`);
+  // Keep title-level metadata out of public workflow logs.
   await sleep(1500);
 }
 for (const [h, v] of Object.entries(prev)) if (!items[h]) items[h] = v; // keep old entries if a lookup failed
-fs.writeFileSync(OUT, JSON.stringify(encrypt({ updated: new Date().toISOString(), items })));
-console.log('wrote', OUT, Object.keys(items).length, 'titles');
+const changed = writeRatingsIfChanged(OUT, codec, previous, items);
+console.log(changed ? 'wrote' : 'unchanged', OUT, Object.keys(items).length, 'titles');

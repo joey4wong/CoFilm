@@ -6,17 +6,18 @@
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0a0a0a">
-<script src="theme.js?v=66"></script>
+<script src="theme.js?v=68"></script>
 <title>CoFilm</title>
-<link rel="icon" href="favicon.ico?v=3" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=3">
-<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=3">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
+<link rel="icon" href="favicon.ico?v=68" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=68">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=68">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=68">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=67">
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="style.css?v=68">
+<link rel="preconnect" href="https://image.tmdb.org">
+<link rel="modulepreload" href="lib/catalog.mjs?v=68">
 </head>
 <body>
 <div id="ambient"></div>
@@ -30,11 +31,11 @@
 </nav>
 
 <main id="view"></main>
-<div id="toast" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
 
 <div id="search" class="overlay" hidden>
   <div class="searchbox">
-    <input id="q" type="search" placeholder="Search by title, actor, director, genre or year" autocomplete="off">
+    <input id="q" aria-label="Search the library" type="search" placeholder="Search by title, actor, director, genre or year" autocomplete="off">
     <button class="icon" data-close-search aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
   <div id="results" class="grid"></div>
@@ -49,18 +50,18 @@
   <div class="box">
     <h2>Welcome to CoFilm</h2>
     <p>Enter your access code to start watching.</p>
-    <input id="codeInput" type="text" placeholder="xxxx-xxxx" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-size:20px;letter-spacing:.12em;text-align:center">
+    <input id="codeInput" aria-label="Access code" type="text" placeholder="xxxx-xxxx" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-size:20px;letter-spacing:.12em;text-align:center">
     <div class="actions"><button id="unlockBtn" class="pill">Unlock</button><button id="cancelSetup" class="pill ghost">Cancel</button></div>
-    <p id="codeMsg" class="small" style="min-height:1.2em;color:#ff8a80"></p>
+    <p id="codeMsg" role="alert" class="small" style="min-height:1.2em;color:#ff8a80"></p>
     <details class="adv"><summary class="small">Advanced: set up with a OneDrive link</summary>
       <p class="small">Paste the view-only OneDrive share link of the movie folder. It is saved only in this browser.</p>
-      <input id="linkInput" type="url" placeholder="https://1drv.ms/f/c/...">
+      <input id="linkInput" aria-label="OneDrive share link" type="url" placeholder="https://1drv.ms/f/c/...">
       <p class="small" style="margin:0">TMDB API key (optional)</p>
-      <input id="tmdbInput" type="text" placeholder="32-character API key" autocomplete="off">
+      <input id="tmdbInput" aria-label="TMDB API key" type="text" placeholder="32-character API key" autocomplete="off">
       <div class="actions"><button id="saveLink" class="pill small">Save &amp; load</button><button id="clearCache" class="pill ghost small">Clear metadata cache</button></div>
     </details>
   </div>
 </div>
-<script type="module" src="app.js?v=67"></script>
+<script type="module" src="app.js?v=68"></script>
 </body>
 </html>

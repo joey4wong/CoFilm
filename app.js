@@ -1,3 +1,4 @@
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=68';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -10,10 +11,6 @@ const LS = {
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const VIDEO_EXT = /\.(mkv|mp4|m4v|mov|avi|ts|m2ts|webm|wmv|flv)$/i;
-const SUB_EXT = /\.(srt|ass|ssa|vtt)$/i;
-const STRONG = /^(\d{3,4}p|blu-?ray|bdrip|brrip|web-?dl|webrip|web|hdtv|hdrip|dvdrip|uhd|4k|remux|hdr|hdr10\+?|dv|x26[45]|h\.?26[45]|hevc|avc|10bit|8bit|ddp?\d?(\.\d)?|aac\d?(\.\d)?|dts(-hd)?|truehd|atmos|cc|it|amzn|nf|ma)$/i;
-const EDITION = /^(unrated|extended|dubbed|repack|proper|imax|remastered|directors|cut|uncut|criterion|multi|dual|limited|internal|bluray)$/i;
 
 const state = { items: [], genre: 'All', q: '', sort: 'added', listedAt: 0 };
 
@@ -60,33 +57,8 @@ async function listAll(link) {
 }
 
 // ---------- filename parsing ----------
-function parseName(name) {
-  let base = name.replace(/\.[a-z0-9]{2,4}$/i, m => (VIDEO_EXT.test(m) || SUB_EXT.test(m) ? '' : m));
-  base = base.replace(/\[[^\]]*\]/g, ' ').replace(/[\u4e00-\u9fff]+/g, ' ');
-  const ep = base.match(/^(.*?)[ ._-]+S(\d{1,2})[ ._-]?E(\d{1,3})/i);
-  if (ep) {
-    const title = ep[1].replace(/[._]+/g, ' ').trim();
-    return { kind: 'series', title, season: +ep[2], episode: +ep[3], year: null };
-  }
-  const tok = base.split(/[ ._]+/).filter(Boolean);
-  let q = tok.findIndex((t, i) => i > 0 && STRONG.test(t));
-  if (q < 0) q = tok.length;
-  let y = -1;
-  for (let i = 1; i < q; i++) if (/^(19|20)\d\d$/.test(tok[i])) y = i;
-  const tt = (y > 0 ? tok.slice(0, y) : tok.slice(0, q)).filter((t, i) => i === 0 || !EDITION.test(t));
-  return { kind: 'movie', title: tt.join(' ').replace(/\s+-\s*$/, '').trim(), year: y > 0 ? +tok[y] : null };
-}
-const keyOf = p => (p.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()) + '|' + (p.year || '');
-
 // ---------- metadata (Cinemeta, no API key) ----------
 const TMDB_API = 'https://api.themoviedb.org/3';
-const normT = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
-const wordsT = s => String(s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
-function titleScore(name, t) {
-  if (normT(name) === normT(t)) return 100;
-  const tw = wordsT(t), xw = wordsT(name), ov = tw.filter(w => xw.includes(w)).length;
-  return ov + (xw[0] === tw[0] ? 0.5 : 0);
-}
 // TMDB search: returns full TMDB details (with external_ids) of the best match, or null
 async function tmdbLookup(p, key, tmdbId) {
   const tv = p.kind === 'series', type = tv ? 'tv' : 'movie';
@@ -114,12 +86,15 @@ async function tmdbLookup(p, key, tmdbId) {
   if (!tmdbId) return null;
   return get(`/${type}/${tmdbId}?append_to_response=external_ids`);
 }
+const metaKey = p => 'meta3:' + p.kind + ':' + keyOf(p);
+function cachedMetadata(p) {
+  const entry = LS.get(metaKey(p));
+  return { entry, fresh: isFreshMeta(entry) };
+}
 async function findMeta(p) {
   const ck = 'meta:' + p.kind + ':' + keyOf(p);
-  const vk = 'meta3:' + p.kind + ':' + keyOf(p);
-  const cached = LS.get(vk);
-  const age = cached ? Date.now() - cached.t : Infinity;
-  if (cached && (cached.ok ? age < 7 * 864e5 : age < 3 * 864e5)) return cached.ok ? cached.m : null;
+  const vk = metaKey(p), { entry: cached, fresh } = cachedMetadata(p);
+  if (fresh) return cached.ok ? cached.m : null;
   let m = null;
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
@@ -169,6 +144,7 @@ async function findMeta(p) {
         name: T.title || T.name || d?.name, year: tYear || d?.releaseInfo || d?.year,
         desc: T.overview || d?.description,
         rating: d?.imdbRating || (T.vote_average ? T.vote_average.toFixed(1) : ''),
+        imdbRating: d?.imdbRating || null, ratingSource: d?.imdbRating ? 'IMDb' : 'TMDB',
         genres: (T.genres || []).map(g => g.name.replace('Science Fiction', 'Sci-Fi')).filter(Boolean).length ? T.genres.map(g => g.name.replace('Science Fiction', 'Sci-Fi')) : (d?.genres || d?.genre || []),
         cast: d?.cast || [], director: d?.director || (T.created_by || []).map(c => c.name), runtime: tRun ? tRun + ' min' : d?.runtime,
         poster: T.poster_path ? I + 'w500' + T.poster_path : (id ? `https://images.metahub.space/poster/medium/${id}/img` : ''),
@@ -224,15 +200,22 @@ function saveFiles(files) {
   LS.set('od:files', files.map(f => ({ id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'], webUrl: f.webUrl, createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime, video: f.video, file: f.file, thumbnails: f.thumbnails })));
   LS.set('od:listedAt', Date.now());
 }
-async function applyFiles(files) {
+async function applyFiles(files, { refreshMetadata = true } = {}) {
   const old = new Map(state.items.map(it => [it.key, it.meta]));
   const before = state.items.length;
   state.listedAt = LS.get('od:listedAt');
   state.items = buildItems(files);
-  for (const it of state.items) if (old.has(it.key)) it.meta = old.get(it.key);
-  render();
-  await pool(state.items, 6, async it => { const m = await findMeta(it.parsed); if (m !== it.meta) { it.meta = m; scheduleRender(); } });
-  render();
+  const pending = [];
+  for (const it of state.items) {
+    const { entry, fresh } = cachedMetadata(it.parsed);
+    it.meta = old.has(it.key) ? old.get(it.key) : entry?.ok ? entry.m : null;
+    if (!fresh) pending.push(it);
+  }
+  render(); // Show the cached library immediately; don't wait for metadata requests.
+  if (refreshMetadata && pending.length) {
+    await pool(pending, 6, async it => { const m = await findMeta(it.parsed); if (m !== it.meta) { it.meta = m; scheduleRender(); } });
+    render();
+  }
   applyErotic();
   return state.items.length - before;
 }
@@ -242,7 +225,7 @@ async function load(force) {
   if (loading) return; loading = true;
   try {
     const cached = LS.get('od:files');
-    if (cached && !state.items.length && !force) await applyFiles(cached);
+    if (cached && !state.items.length && !force) await applyFiles(cached, { refreshMetadata: false });
     else if (!cached) toast('Loading OneDrive…');
     const files = await listAll(link);
     saveFiles(files);
@@ -514,10 +497,11 @@ function startEmbeddedSubs(el, src, playToken) {
 }
 
 // ---------- player ----------
-// The player engine is ~11 MB, so it is only downloaded when you press play (and warmed up after the page is idle).
+// Keep the multi-megabyte player off the browsing path. Download only when PLAY/RESUME is pressed.
 let playerLib = null;
-function loadPlayerLib() { return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js'); }
-(window.requestIdleCallback || (f => setTimeout(f, 4000)))(() => setTimeout(loadPlayerLib, 3000));
+function loadPlayerLib() {
+  return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js').catch(e => { playerLib = null; throw e; });
+}
 let player = null, saveTimer = 0, current = null, embTok = null;
 async function play(fileId, restart) {
   let it, f;
@@ -723,6 +707,7 @@ function creditsOf(it) {
         const cast = (cr.cast || []).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
         const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).map(p => ({ n: p.name, r: 'Director', p: p.profile_path }));
         LS.set('tmdbc:' + id, { v: 2, cast, crew, t: Date.now() });
+        delete it._st; // New cast/roles must be searchable without a reload.
         if (location.hash.includes(enc(it.key))) render();
       } catch (e) { console.warn('tmdb', e); }
       finally { creditsPending.delete(id); }
@@ -753,7 +738,7 @@ async function loadRatings() {
     state.rHash = {};
     render();
     applyErotic();
-  } catch (e) { console.warn('ratings', e); }
+  } catch (e) { console.warn('ratings', e); state.ratings ||= {}; scheduleRender(); }
 }
 async function ratingHash(id) {
   const k = await rKey(); if (!k) return null;
@@ -785,11 +770,29 @@ async function applyErotic() {
   if (changed) render();
 }
 
+// Legacy metadata did not identify its rating source. Never label a TMDB fallback as IMDb.
+const legacyImdbRatings = new Map();
+function imdbRatingOf(it, ratings) {
+  if (ratings.imdb?.v) return ratings.imdb.v;
+  const m = it.meta || {}, id = m.id;
+  if (Object.hasOwn(m, 'imdbRating')) return m.imdbRating;
+  if (!/^tt\d+$/.test(id || '') || !state.ratings) return null;
+  if (!legacyImdbRatings.has(id)) {
+    legacyImdbRatings.set(id, null);
+    fetch(`${META}/meta/${it.parsed.kind}/${id}.json`).then(r => { if (!r.ok) throw Error('IMDb supplement returned ' + r.status); return r.json(); }).then(j => {
+      const value = j.meta?.imdbRating, n = Number(value);
+      legacyImdbRatings.set(id, n > 0 && n <= 10 ? String(value) : null);
+      if (location.hash.includes(enc(it.key))) scheduleRender();
+    }).catch(e => console.warn('IMDb supplement', e));
+  }
+  return legacyImdbRatings.get(id);
+}
+
 function ratingsHtml(it) {
   const m = it.meta || {}, r = ratingsOf(it) || {}, id = /^tt/.test(m.id || '') ? m.id : '';
   const q = encodeURIComponent(m.name || it.parsed.title);
   const imdbU = r.imdb?.u || (id ? `https://www.imdb.com/title/${id}/` : `https://www.imdb.com/find/?q=${q}`);
-  const imdbV = r.imdb?.v || m.rating;
+  const imdbV = imdbRatingOf(it, r);
   const rtU = r.rt?.u || `https://www.rottentomatoes.com/search?search=${q}`;
   const dbU = r.db?.u || `https://search.douban.com/movie/subject_search?search_text=${id || q}`;
   const ICON = {
@@ -1099,7 +1102,13 @@ function layoutLightArtwork() {
     });
   }
 }
-function settleLightArtwork() { const update = () => { layoutLightArtwork(); updateNavContrast(); }; requestAnimationFrame(update); setTimeout(update, 350); setTimeout(update, 1200); }
+let artworkFrame = 0, artworkTimers = [];
+function settleLightArtwork() {
+  cancelAnimationFrame(artworkFrame); artworkTimers.forEach(clearTimeout);
+  const update = () => { layoutLightArtwork(); updateNavContrast(); };
+  artworkFrame = requestAnimationFrame(update);
+  artworkTimers = [setTimeout(update, 350), setTimeout(update, 1200)];
+}
 document.fonts?.ready.then(settleLightArtwork);
 window.addEventListener('load', settleLightArtwork);
 window.addEventListener('cofilmthemechange', settleLightArtwork);
@@ -1142,6 +1151,7 @@ function routeInfo() {
 }
 let lastRoute = '';
 function render() {
+  clearTimeout(rt); // A full render supersedes any pending metadata render.
   const r = routeInfo();
   const sig = location.hash;
   const keepScroll = sig === lastRoute;
@@ -1159,7 +1169,7 @@ function render() {
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').dataset.railRestoreIndex = String(recommendationIndex);
   if (browseScroll) document.querySelectorAll('.browse-section').forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(browseScroll.get(s.dataset.rowKey) || 0); });
-  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.name === 'detail' ? '' : r.name)));
+  document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
   lastRoute = sig;

@@ -1,5 +1,25 @@
 # CoFilm
 
-A static web page that turns a OneDrive shared folder into a movie library and plays MKV/HEVC files in the browser (Movi Player). Metadata comes from TMDB and Cinemeta; IMDb / Rotten Tomatoes / Douban ratings are refreshed every 6 hours by a GitHub Action.
+A static, browser-only OneDrive movie library. GitHub Pages serves native JavaScript modules and CSS; no framework, install step, server, or bundler is required.
 
-Private data is never stored in plain text here: the OneDrive link and TMDB key live in GitHub Actions secrets, and `config.enc.json` / `ratings.enc.json` are AES-GCM encrypted.
+## Structure
+- `app.js`: browser UI, OneDrive access, cached metadata and playback orchestration.
+- `lib/catalog.mjs`: shared filename parsing, stable library keys, title matching and cache rules.
+- `theme.js` / `style.css`: automatic theme, common geometry and refractive glass.
+- `scripts/ratings.mjs`: scheduled IMDb (via Cinemeta), Rotten Tomatoes critics and Douban lookups.
+- `scripts/ratings-store.mjs`: encrypted storage, atomic writes and fail-closed recovery.
+
+The multi-megabyte Movi player is downloaded only after PLAY/RESUME, not during ordinary browsing. Cached titles appear before OneDrive revalidation; fresh metadata is not fetched or processed twice.
+
+## Check changes
+Use Node.js 22+ and run `npm run check`. There are no npm dependencies to install. This checks syntax, local HTML assets and the automated tests. The same checks run on pushes and pull requests.
+
+The ratings workflow is scheduled every 3 hours (GitHub may delay scheduled runs) and can be dispatched manually. A failed read/decrypt/listing leaves the previous file untouched. Observation timestamps alone do not trigger a new encrypted file or Pages build; `updated` therefore means the last data change, not the last lookup attempt. Existing records are retained on partial lookup failures. Workflow logs report aggregate counts, not individual movie titles.
+
+## Privacy and access
+`config.enc.json` and `ratings.enc.json` are AES-GCM encrypted. OneDrive and TMDB settings are also stored in the authorized browser's localStorage, not as plaintext files in this repository. The rating job obtains them from GitHub Actions secrets.
+
+The access code is a convenience gate, not server-side authorization. Anyone with the underlying anonymous OneDrive share link can read that shared folder; changing the website code does not revoke an already-disclosed link. Revoke or replace the OneDrive share link when access must be withdrawn.
+
+## Deliberately unchanged
+Playback range caching, resume positions, external/embedded subtitle pipelines, movie-grid columns, cast paging and poster-arrow click isolation are not rewritten by this maintenance pass. Further module extraction should be incremental, not a framework migration.

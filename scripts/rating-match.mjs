@@ -1,8 +1,6 @@
 // Unicode-aware identity matching shared by the rating updater and its tests.
-const fold = s => String(s || '').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/ß/g, 'ss');
-export const norm = s => fold(s).replace(/[^\p{L}\p{N}]+/gu, '');
-export const words = s => fold(s).replace(/[^\p{L}\p{N} ]+/gu, ' ').split(/\s+/).filter(Boolean);
-export const tscore = (n, t) => { const a = words(t), b = words(n); if (norm(n) && norm(n) === norm(t)) return 100; return a.filter(w => b.includes(w)).length + (a.length && a[0] === b[0] ? .5 : 0); };
+import { norm } from '../lib/catalog.mjs';
+export { norm, words, tscore } from '../lib/catalog.mjs';
 // Suggestions are candidates, not identity proof. Require an exact known alias,
 // a compatible year, and an unambiguous result rather than the first same-year film.
 export function selectDoubanCandidate(rows, aliases, year) {
