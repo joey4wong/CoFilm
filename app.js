@@ -744,17 +744,38 @@ function showSlide(i) {
 }
 function startHero() { stopHero(); if (!hero.paused && hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
 function stopHero() { clearInterval(hero.timer); }
-window.addEventListener('hashchange', () => { if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); openSetup(); return; } render(); });
+window.addEventListener('hashchange', () => { if (location.hash === '#search') { history.replaceState(null, '', location.pathname + (lastRoute || '')); openSearch(); return; } if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); openSetup(); return; } render(); });
 
 // ---------- search ----------
+const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function searchText(it) {
+  if (it._st && it._stm === it.meta) return it._st;
+  const m = it.meta || {}, cr = m.id ? LS.get('tmdbc:' + m.id) : null;
+  it._st = fold([title(it), it.parsed.title, m.year || it.parsed.year, ...(m.genres || []), ...(m.cast || []), ...(m.director || []),
+    ...(cr?.cast || []).map(p => p.n + ' ' + (p.r || '')), ...(cr?.crew || []).map(p => p.n), m.country, it.files.map(f => f.name.replace(/[._]+/g, ' ')).join(' ')].join(' | '));
+  it._stm = it.meta;
+  return it._st;
+}
 function renderSearch() {
-  const q = $('#q').value.trim().toLowerCase();
-  const list = !q ? [...state.items].sort((a, b) => b.added - a.added) : state.items.filter(it => [title(it), it.parsed.title, ...(it.meta?.cast || []), ...(it.meta?.director || []), ...(it.meta?.genres || []).map(g => g ), yearOf(it), it.files.map(f => f.name).join(' ')].join(' ').toLowerCase().includes(q));
-  $('#results').innerHTML = list.map(it => card(it, { caption: yearOf(it) })).join('') || '<p class="empty">No results</p>';
+  const words = fold($('#q').value).split(/\s+/).filter(Boolean);
+  let list;
+  if (!words.length) list = [...state.items].sort((a, b) => b.added - a.added);
+  else {
+    list = state.items.map(it => {
+      const t = searchText(it), tl = fold(title(it));
+      if (!words.every(w => t.includes(w))) return null;
+      const q = words.join(' ');
+      const score = (tl === q ? 100 : tl.startsWith(q) ? 50 : tl.includes(q) ? 25 : 0) + (parseFloat(it.meta?.rating) || 0);
+      return { it, score };
+    }).filter(Boolean).sort((a, b) => b.score - a.score).map(x => x.it);
+  }
+  $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
+    (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
 }
 function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); setTimeout(() => $('#q').focus(), 50); }
 function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
 $('#q').oninput = renderSearch;
+$('#searchLink').onclick = e => { e.preventDefault(); openSearch(); };
 
 
 // ---------- access code: decrypts config.enc.json (OneDrive link + TMDB key) ----------
