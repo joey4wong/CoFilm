@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=93';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=94';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -666,7 +666,7 @@ function movieToolbar(view, genres, decades, countries) {
   const active = view.genre || view.decade || view.country || view.only4k || view.sort !== 'added';
   return `<div class="toolbar" role="group" aria-label="Sort and filter movies">
     ${select('sort', 'Sort', MOVIE_SORTS, view.sort)}
-    ${select('genre', 'Genre', [['', 'All genres'], ...genres.map(([g, n]) => [g, g + ' \u00b7 ' + n])], view.genre)}
+    ${select('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
     ${select('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
     ${select('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
     <button type="button" class="chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
@@ -684,14 +684,12 @@ function viewList(kind) {
     <div class="grid">${list.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
   }
   const facts = all.map(movieFacts);
-  const genreCount = new Map();
-  for (const f of facts) for (const g of f.genres) genreCount.set(g, (genreCount.get(g) || 0) + 1);
-  const genres = [...genreCount.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+  const genres = [...new Set(facts.flatMap(f => f.genres))].sort((x, y) => x.localeCompare(y));   // A to Z, no counts
   const decades = [...new Set(facts.map(f => decadeOf(f.year)).filter(Boolean))].sort((a, b) => b - a);
   const countries = [...new Set(facts.flatMap(f => f.countries))].sort((a, b) => a.localeCompare(b));
   const saved = movieView();
   // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
-  const view = { ...saved, genre: genreCount.has(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
+  const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
   const shown = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
   const count = shown.length === all.length ? String(all.length) : `${shown.length} of ${all.length}`;
   return `<div class="page"><h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>

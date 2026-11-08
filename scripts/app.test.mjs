@@ -99,3 +99,7 @@ test('Genres lives in the Movies toolbar; the nav has no Genres tab and old link
   assert.match(source,/startsWith\('#\/genres'\)/);assert.match(source,/history\.replaceState\(null, '', location\.pathname \+ location\.search \+ '#\/movies'\)/);
   assert.doesNotMatch(source,/function viewGenres/);
 });
+
+test('the genre list shows plain names in A to Z order, without counts',()=>{
+  assert.match(source,/genres\.map\(g => \[g, g\]\)/);assert.doesNotMatch(source,/g \+ ' \\u00b7 ' \+ n/);assert.match(source,/localeCompare\(y\)\);   \/\/ A to Z, no counts/);
+});
