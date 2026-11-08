@@ -121,5 +121,12 @@ test('player header never uses the frosted overlay layer and is the same in both
   assert.match(css,/#player::before\{display:none\}/);
   assert.doesNotMatch(css,/\[data-theme="light"\][^{]*(\.ptop|#pclose|\.pclose|#player)/);
   assert.match(css,/\.ptop\{position:absolute/);assert.match(css,/#player\.idle \.ptop\{opacity:0\}/);
-  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="pclose" class="pclose"[^>]*aria-label="Close player"/);assert.doesNotMatch(html,/Close<\/button>/);
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="pclose" class="pclose lg"[^>]*aria-label="Close player"/);assert.doesNotMatch(html,/Close<\/button>/);
+});
+
+test('the player close button uses the shared Liquid Glass lens, identical in both themes',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/#player \.pclose\.lg\{background:rgba\(255,255,255,\.1\)!important;box-shadow:/);   // out-ranks [data-theme="light"] .lg
+  assert.doesNotMatch(css,/\.pclose[^{]*\{[^}]*backdrop-filter/);                                          // the lens comes from .lg, not a private blur
+  assert.match(source,/wakePlayerBar\(\); requestAnimationFrame\(applyGlass\)/);
 });

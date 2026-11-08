@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=95';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=96';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -443,7 +443,7 @@ async function play(fileId, restart) {
   $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
   const wrap = $('#pwrap');
   wrap.innerHTML = `<div class="ploading"${it.meta?.background ? ` style="background-image:url('${esc(it.meta.background)}')"` : ''}><span class="pspinner" aria-label="Loading"></span></div>`;
-  $('#player').hidden = false; document.body.style.overflow = 'hidden'; wakePlayerBar();
+  $('#player').hidden = false; document.body.style.overflow = 'hidden'; wakePlayerBar(); requestAnimationFrame(applyGlass);   // build the glass lens now that the button has a size
   if (!history.state?.player) history.pushState({ player: true }, '', location.href);  // Back closes the player
   f = await freshFile(f);
   current = { it, f };
