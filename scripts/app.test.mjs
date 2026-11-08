@@ -92,3 +92,10 @@ test('modifier combinations never reach the player, and are never cancelled eith
   assert.ok(start>0);const block=source.slice(start,source.indexOf('}, true);',start));
   assert.match(block,/e\.stopPropagation\(\)/);assert.doesNotMatch(block,/preventDefault/);
 });
+
+test('Genres lives in the Movies toolbar; the nav has no Genres tab and old links are redirected',()=>{
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(html,/data-route="genres"/);assert.match(source,/select\('genre', 'Genre'/);
+  assert.match(source,/startsWith\('#\/genres'\)/);assert.match(source,/history\.replaceState\(null, '', location\.pathname \+ location\.search \+ '#\/movies'\)/);
+  assert.doesNotMatch(source,/function viewGenres/);
+});

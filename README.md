@@ -12,7 +12,7 @@ A static, browser-only OneDrive movie library. GitHub Pages serves native JavaSc
 The multi-megabyte Movi player is downloaded only after PLAY/RESUME, not during ordinary browsing. Cached titles appear before OneDrive revalidation; fresh metadata is not fetched or processed twice.
 
 ## Using the site
-- **Movies page**: sort by recently added, year, rating, title, country or 4K first; filter by decade, country or 4K only. The choice is remembered on this device.
+- **Movies page**: sort by recently added, year, rating, title, country or 4K first; filter by genre, decade, country or 4K only (Genres is a filter here, not a separate page). The choice is remembered on this device.
 - **Detail page**: besides "More like this", rows for the same director and for shared leading cast, taken from this library only.
 - **Install as an app**: iPhone/iPad Safari, Share > Add to Home Screen. Android Chrome, menu > Install app. It opens full screen with the cat icon. The service worker caches nothing, so every release arrives immediately.
 - **Player keys**: Space pause/play, F fullscreen, M mute, Up/Down volume, Left/Right skip 10 seconds. Cmd/Ctrl/Alt combinations are left to the browser.

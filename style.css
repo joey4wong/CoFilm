@@ -69,9 +69,6 @@ main{min-height:100vh}
 .row.wide .pos{aspect-ratio:16/9}
 .grid{display:grid;gap:34px 20px;padding:0 var(--pad);grid-template-columns:repeat(auto-fill,minmax(clamp(128px,12vw,190px),1fr))}
 .grid .card{width:auto}
-.chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 var(--pad) 28px}
-.chips button{padding:8px 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font-size:14px;color:rgba(255,255,255,.8)}
-.chips button.on{background:#fff;color:#111}
 /* detail */
 .detail{position:relative;min-height:100vh}
 .detail .bg{position:absolute;inset:0;height:100vh;background-size:cover;background-position:center 20%}
@@ -272,8 +269,6 @@ body{overflow-x:clip}
 [data-theme="light"] .cast-next:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
 [data-theme="light"] .card .pos{background:var(--surface);box-shadow:0 4px 14px rgba(35,39,36,.12);outline-color:rgba(35,39,36,.09)}
 [data-theme="light"] .card:hover .pos{box-shadow:0 12px 28px rgba(23,27,36,.2)}
-[data-theme="light"] .chips button{background:var(--surface);border-color:rgba(23,27,36,.12);color:var(--muted)}
-[data-theme="light"] .chips button.on{background:#1b202b;color:#fff}
 [data-theme="light"] .ep{background:var(--surface);border-color:rgba(23,27,36,.08)}
 [data-theme="light"] .ep:hover{background:#f8f8f5}
 

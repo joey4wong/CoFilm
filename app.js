@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=92';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=93';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -650,22 +650,23 @@ function viewHome() {
     </div>`;
 }
 // ---------- Movies page: sort and filter (remembered on this device) ----------
-const MOVIE_VIEW_DEFAULT = { sort: 'added', decade: '', country: '', only4k: false };
+const MOVIE_VIEW_DEFAULT = { sort: 'added', genre: '', decade: '', country: '', only4k: false };
 const movieView = () => ({ ...MOVIE_VIEW_DEFAULT, ...LS.get('view:movies', {}) });
 const countriesOf = it => String(it.meta?.country || '').split(',').map(s => s.trim()).filter(Boolean);
 function movieFacts(it) {
-  return { it, title: title(it), year: parseInt(yearOf(it), 10) || null, countries: countriesOf(it), rating: parseFloat(it.meta?.rating) || 0, is4k: quality(it.files[0]) === '4K', added: it.added };
+  return { it, title: title(it), year: parseInt(yearOf(it), 10) || null, countries: countriesOf(it), genres: it.meta?.genres || [], rating: parseFloat(it.meta?.rating) || 0, is4k: quality(it.files[0]) === '4K', added: it.added };
 }
 function setMovieView(patch, focus) {
   LS.set('view:movies', { ...movieView(), ...patch });
   render();
   if (focus) $(focus)?.focus();       // keep keyboard position after the page redraws
 }
-function movieToolbar(view, decades, countries) {
+function movieToolbar(view, genres, decades, countries) {
   const select = (name, label, options, value) => `<label class="sel"><span>${label}</span><select data-movie-view="${name}" aria-label="${label}">${options.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
-  const active = view.decade || view.country || view.only4k || view.sort !== 'added';
+  const active = view.genre || view.decade || view.country || view.only4k || view.sort !== 'added';
   return `<div class="toolbar" role="group" aria-label="Sort and filter movies">
     ${select('sort', 'Sort', MOVIE_SORTS, view.sort)}
+    ${select('genre', 'Genre', [['', 'All genres'], ...genres.map(([g, n]) => [g, g + ' \u00b7 ' + n])], view.genre)}
     ${select('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
     ${select('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
     <button type="button" class="chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
@@ -683,26 +684,19 @@ function viewList(kind) {
     <div class="grid">${list.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
   }
   const facts = all.map(movieFacts);
+  const genreCount = new Map();
+  for (const f of facts) for (const g of f.genres) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+  const genres = [...genreCount.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
   const decades = [...new Set(facts.map(f => decadeOf(f.year)).filter(Boolean))].sort((a, b) => b - a);
   const countries = [...new Set(facts.flatMap(f => f.countries))].sort((a, b) => a.localeCompare(b));
   const saved = movieView();
   // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
-  const view = { ...saved, decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
+  const view = { ...saved, genre: genreCount.has(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
   const shown = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
   const count = shown.length === all.length ? String(all.length) : `${shown.length} of ${all.length}`;
   return `<div class="page"><h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>
-    ${movieToolbar(view, decades, countries)}
+    ${movieToolbar(view, genres, decades, countries)}
     <div class="grid">${shown.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">No movies match these filters.</p>'}</div></div>`;
-}
-function viewGenres(sel) {
-  const gcount = new Map();
-  for (const it of state.items) for (const g of it.meta?.genres || []) gcount.set(g, (gcount.get(g) || 0) + 1);
-  const gs = [...gcount.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]);
-  sel = sel && gs.includes(sel) ? sel : gs[0];
-  const list = state.items.filter(it => it.meta?.genres?.includes(sel)).sort((a, b) => (parseFloat(b.meta?.rating) || 0) - (parseFloat(a.meta?.rating) || 0));
-  setAmbient(list[0] ? bgOf(list[0]) : '');
-  return `<div class="page"><h1>Genres</h1><div class="chips">${gs.map(g => `<button data-genre="${esc(g)}" class="${g === sel ? 'on' : ''}">${esc(g)} · ${gcount.get(g)}</button>`).join('')}</div>
-    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.rating ? '★ ' + it.meta.rating : ''].filter(Boolean).join(' · ') })).join('')}</div></div>`;
 }
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
@@ -1200,11 +1194,15 @@ function routeInfo() {
   if (h.startsWith('/t/')) return { name: 'detail', arg: decodeURIComponent(h.slice(3)) };
   if (h.startsWith('/movies')) return { name: 'movies' };
   if (h.startsWith('/shows')) return { name: 'shows' };
-  if (h.startsWith('/genres')) return { name: 'genres', arg: decodeURIComponent(h.split('/')[2] || '') };
   return { name: 'home' };
 }
 let lastRoute = '';
 function render() {
+  if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
+    let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
+    if (genre) LS.set('view:movies', { ...movieView(), genre });
+    history.replaceState(null, '', location.pathname + location.search + '#/movies');
+  }
   clearTimeout(rt); // A full render supersedes any pending metadata render.
   const r = routeInfo();
   const sig = location.hash;
@@ -1217,7 +1215,6 @@ function render() {
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
   else if (r.name === 'shows') html = viewList('series');
-  else if (r.name === 'genres') html = viewGenres(r.arg);
   else html = viewHome();
   $('#view').innerHTML = html;
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
@@ -1391,8 +1388,6 @@ document.addEventListener('click', e => {
   if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
   if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
   if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); $('[data-movie-view="sort"]')?.focus(); return; }
-  const g = t.closest('[data-genre]');
-  if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
