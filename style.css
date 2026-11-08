@@ -397,3 +397,17 @@ body{overflow-x:clip}
 [data-theme="light"] .ep:focus-visible{outline-color:#1b202b}
 
 .ptop .glass-action.pclose{height:40px;padding:0 20px;font-size:14px}
+
+/* Movies toolbar: same pill look as the genre chips, in both themes. */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 var(--pad) 28px}
+.toolbar .sel{position:relative;display:inline-flex;align-items:center}
+.toolbar .sel span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.toolbar .sel::after{content:"";position:absolute;right:15px;top:50%;width:6px;height:6px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:translateY(-70%) rotate(45deg);pointer-events:none;opacity:.7}
+.toolbar select{appearance:none;-webkit-appearance:none;padding:8px 36px 8px 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font:inherit;font-size:14px;color:rgba(255,255,255,.8);cursor:pointer;max-width:100%}
+.toolbar select:focus-visible,.toolbar .chip-toggle:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
+.toolbar .chip-toggle{padding:8px 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font-size:14px;color:rgba(255,255,255,.8)}
+.toolbar .chip-toggle.on{background:#fff;color:#111}
+[data-theme="light"] .toolbar select,[data-theme="light"] .toolbar .chip-toggle{background:var(--surface);border-color:rgba(23,27,36,.12);color:var(--muted)}
+[data-theme="light"] .toolbar .chip-toggle.on{background:#1b202b;color:#fff}
+[data-theme="light"] .toolbar select:focus-visible,[data-theme="light"] .toolbar .chip-toggle:focus-visible{outline-color:#1b202b}
+@media (max-width:600px){.toolbar .sel{flex:1 1 calc(50% - 5px);min-width:0}.toolbar select{width:100%}.toolbar .sel:first-child{flex-basis:100%}}

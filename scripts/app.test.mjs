@@ -26,7 +26,7 @@ test('legacy metadata supplements only the actual IMDb source, once',async()=>{c
 
 function seekFixture(duration,currentTime) {
   const shown=[],context={player:{duration,currentTime},SKIP_SECONDS:10,toast:(m)=>shown.push(m)};
-  return{context,shown,seekBy:fn('function seekBy(','function closePlayer(',context)};
+  return{context,shown,seekBy:fn('function seekBy(','function togglePlay(',context)};
 }
 test('arrow-key skip moves 10 seconds and stays inside the film',()=>{
   const f=seekFixture(100,50);f.seekBy(10);assert.equal(f.context.player.currentTime,60);f.seekBy(-10);assert.equal(f.context.player.currentTime,50);
@@ -34,4 +34,61 @@ test('arrow-key skip moves 10 seconds and stays inside the film',()=>{
   f.context.player.currentTime=95;f.seekBy(10);assert.equal(f.context.player.currentTime,100);
 });
 test('skipping does nothing before the video has loaded',()=>{const f=seekFixture(0,0);f.seekBy(10);assert.equal(f.context.player.currentTime,0);assert.deepEqual(f.shown,[]);});
-test('Left/Right shortcuts are limited to an open player and not typing fields',()=>{assert.match(source,/!\$\('#player'\)\.hidden && \(e\.key === 'ArrowLeft' \|\| e\.key === 'ArrowRight'\)/);assert.match(source,/INPUT\|TEXTAREA\|SELECT/);});
+test('player shortcuts are limited to an open player, never typing fields or Cmd/Ctrl/Alt',()=>{
+  const open={hidden:false},context={$:()=>open};
+  const from=source.indexOf('const playerKeyTarget = ')+'const playerKeyTarget = '.length;
+  const ok=vm.runInNewContext('const isSpaceKey = e => e.key === \' \' || e.code === \'Space\'; ('+source.slice(from,source.indexOf(';\nfunction closePlayer(',from))+')',context);
+  const ev=(extra={})=>({key:'f',altKey:false,ctrlKey:false,metaKey:false,target:{tagName:'DIV',id:''},...extra});
+  assert.equal(ok(ev()),true);
+  assert.equal(ok(ev({target:{tagName:'INPUT'}})),false);
+  assert.equal(ok(ev({metaKey:true})),false);
+  assert.equal(ok(ev({ctrlKey:true})),false);
+  assert.equal(ok(ev({key:' ',target:{tagName:'BUTTON',id:'pclose'}})),false);   // Space on Close still closes
+  assert.equal(ok(ev({key:'',code:'Space',target:{tagName:'BUTTON',id:'pclose'}})),false);   // layouts that report Space only by position
+  assert.equal(ok(ev({key:'',code:'Space'})),true);
+  open.hidden=true;assert.equal(ok(ev()),false);
+});
+function playerFixture(player) { const shown=[],context={player,SKIP_SECONDS:10,toast:m=>shown.push(m),document:{}};return{context,shown,fns:vm.runInNewContext('({togglePlay,toggleMute,changeVolume})',Object.assign(context,{}),{}) } }
+function fnMany(names,context){const code=names.map(n=>{const s=source.indexOf('function '+n+'(');const e=source.indexOf('\n}\n',s)+2;return source.slice(s,e)}).join('\n');return vm.runInNewContext('(()=>{'+code+';return {'+names.join(',')+'}})()',context)}
+test('Space pauses a playing video and plays a paused one',()=>{
+  const calls=[];const p={paused:false,play:()=>{calls.push('play');return Promise.resolve()},pause:()=>calls.push('pause')};
+  const {togglePlay}=fnMany(['togglePlay'],{player:p});togglePlay();p.paused=true;togglePlay();assert.deepEqual(calls,['pause','play']);
+});
+test('M toggles mute and says so',()=>{
+  const shown=[],p={muted:false,volume:0.5};const {toggleMute}=fnMany(['toggleMute'],{player:p,toast:m=>shown.push(m)});
+  toggleMute();assert.equal(p.muted,true);toggleMute();assert.equal(p.muted,false);assert.deepEqual(shown,['Muted','Volume 50%']);
+});
+test('Up/Down change volume in 10% steps, stay between 0 and 100%, and unmute when raised',()=>{
+  const shown=[],p={muted:true,volume:0.95};const {changeVolume}=fnMany(['changeVolume'],{player:p,toast:m=>shown.push(m)});
+  changeVolume(0.1);assert.equal(p.volume,1);assert.equal(p.muted,false);
+  changeVolume(0.1);assert.equal(p.volume,1);
+  p.volume=0.05;changeVolume(-0.1);assert.equal(p.volume,0);
+  p.volume=0.3;changeVolume(-0.1);assert.equal(p.volume,0.2);assert.equal(shown.at(-1),'Volume 20%');
+});
+test('F enters fullscreen on the player and leaves it when already fullscreen',async()=>{
+  const log=[],p={requestFullscreen:()=>{log.push('enter');return Promise.resolve()}},doc={fullscreenElement:null,exitFullscreen:()=>log.push('exit')};
+  const {toggleFullscreen}=fnMany(['toggleFullscreen'],{player:p,document:doc});toggleFullscreen();doc.fullscreenElement={};toggleFullscreen();assert.deepEqual(log,['enter','exit']);
+});
+test('key map covers Space, F, M, arrows and ignores Shift+arrow',()=>{
+  for(const k of ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","' ': togglePlay","f: toggleFullscreen","m: toggleMute"])assert.ok(source.includes(k),k);
+  assert.match(source,/isArrow && e\.shiftKey/);assert.match(source,/isArrow \|\| !e\.repeat/);
+});
+test('rail positions are remembered for every recommendation row, not just the first',()=>{
+  assert.match(source,/railIndex = keepScroll \? new Map\(\[\.\.\.document\.querySelectorAll\(railSections\)\]/);
+  assert.doesNotMatch(source,/id="related-list"/);
+});
+test('every detail row has its own id so several recommendation rows can coexist',()=>{
+  const {row}=fnMany(['row'],{esc:s=>String(s),card:()=>'<a class="card"></a>'});
+  const a=row('More from A',[1],{advance:true,key:'director-a'}),b=row('More with B',[1],{advance:true,key:'cast-b'});
+  assert.match(a,/id="related-director-a"/);assert.match(b,/id="related-cast-b"/);assert.match(a,/aria-controls="related-director-a"/);assert.equal(row('x',[],{advance:true}),'');
+});
+
+test('a key the player already handled (focused player) is not handled a second time',()=>{
+  assert.match(source,/if \(playerKeyTarget\(e\) && !e\.defaultPrevented\)/);
+});
+
+test('modifier combinations never reach the player, and are never cancelled either',()=>{
+  const start=source.indexOf("document.addEventListener('keydown', e => {\n  if (!$('#player').hidden && (e.metaKey");
+  assert.ok(start>0);const block=source.slice(start,source.indexOf('}, true);',start));
+  assert.match(block,/e\.stopPropagation\(\)/);assert.doesNotMatch(block,/preventDefault/);
+});

@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=88';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=92';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -502,6 +502,34 @@ function seekBy(seconds) {
   player.currentTime = Math.min(Math.max(0, player.currentTime + seconds), player.duration);
   toast((seconds > 0 ? '+' : '\u2212') + Math.abs(seconds) + 's', 700);
 }
+function togglePlay() {
+  if (!player) return;
+  if (player.paused) player.play?.().catch?.(() => {}); else player.pause?.();
+}
+function toggleMute() {
+  if (!player) return;
+  player.muted = !player.muted;
+  toast(player.muted ? 'Muted' : 'Volume ' + Math.round(player.volume * 100) + '%', 700);
+}
+function changeVolume(delta) {
+  if (!player) return;
+  const v = Math.min(1, Math.max(0, Math.round(((Number(player.volume) || 0) + delta) * 100) / 100));
+  player.volume = v;
+  if (v > 0 && player.muted) player.muted = false;      // turning the volume up always unmutes
+  toast('Volume ' + Math.round(v * 100) + '%', 700);
+}
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else Promise.resolve(player?.requestFullscreen?.()).catch(() => {});   // same element the player's own button uses
+}
+// Space pause, F fullscreen, M mute, Up/Down volume, Left/Right skip.
+const PLAYER_KEYS = {
+  ArrowLeft: () => seekBy(-SKIP_SECONDS), ArrowRight: () => seekBy(SKIP_SECONDS),
+  ArrowUp: () => changeVolume(0.1), ArrowDown: () => changeVolume(-0.1),
+  ' ': togglePlay, f: toggleFullscreen, m: toggleMute,
+};
+const isSpaceKey = e => e.key === ' ' || e.code === 'Space';   // by value or by key position, so every keyboard layout works
+const playerKeyTarget = e => !$('#player').hidden && !e.altKey && !e.ctrlKey && !e.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(isSpaceKey(e) && e.target.id === 'pclose');
 function closePlayer(fromHistory) {
   if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
   savePosition();
@@ -586,7 +614,10 @@ function card(it, opts = {}) {
 }
 function row(name, list, opts = {}) {
   if (!list.length) return '';
-  if (opts.advance) return `<section class="row recommend-section" data-primary-genre="${esc(opts.genre)}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="related-list" tabindex="0" role="region" aria-label="Related titles">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-prev lg" data-recommend-prev aria-label="Previous recommendations" aria-controls="related-list" title="Previous recommendations" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next recommendations" aria-controls="related-list" title="Next recommendations"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+  if (opts.advance) {
+    const key = opts.key || 'similar', railId = 'related-' + key.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `<section class="row recommend-section" data-row-key="${esc(key)}" data-primary-genre="${esc(opts.genre || '')}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-prev lg" data-recommend-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+  }
 
   const railId = 'home-row-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-prev lg" data-row-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
@@ -618,11 +649,50 @@ function viewHome() {
       ${!items.length ? '<p class="empty">No titles loaded yet.</p>' : ''}
     </div>`;
 }
+// ---------- Movies page: sort and filter (remembered on this device) ----------
+const MOVIE_VIEW_DEFAULT = { sort: 'added', decade: '', country: '', only4k: false };
+const movieView = () => ({ ...MOVIE_VIEW_DEFAULT, ...LS.get('view:movies', {}) });
+const countriesOf = it => String(it.meta?.country || '').split(',').map(s => s.trim()).filter(Boolean);
+function movieFacts(it) {
+  return { it, title: title(it), year: parseInt(yearOf(it), 10) || null, countries: countriesOf(it), rating: parseFloat(it.meta?.rating) || 0, is4k: quality(it.files[0]) === '4K', added: it.added };
+}
+function setMovieView(patch, focus) {
+  LS.set('view:movies', { ...movieView(), ...patch });
+  render();
+  if (focus) $(focus)?.focus();       // keep keyboard position after the page redraws
+}
+function movieToolbar(view, decades, countries) {
+  const select = (name, label, options, value) => `<label class="sel"><span>${label}</span><select data-movie-view="${name}" aria-label="${label}">${options.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+  const active = view.decade || view.country || view.only4k || view.sort !== 'added';
+  return `<div class="toolbar" role="group" aria-label="Sort and filter movies">
+    ${select('sort', 'Sort', MOVIE_SORTS, view.sort)}
+    ${select('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
+    ${select('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
+    <button type="button" class="chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
+    ${active ? '<button type="button" class="chip-toggle" data-movie-reset>Reset</button>' : ''}
+  </div>`;
+}
 function viewList(kind) {
-  const list = state.items.filter(it => it.parsed.kind === kind).sort((a, b) => b.added - a.added);
-  setAmbient(list[0] ? bgOf(list[0]) : '');
-  return `<div class="page"><h1>${kind === 'movie' ? 'Movies' : 'Shows'} <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
-    <div class="grid">${list.map(it => card(it, { caption: [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ') })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
+  const all = state.items.filter(it => it.parsed.kind === kind);
+  const newest = [...all].sort((a, b) => b.added - a.added)[0];
+  setAmbient(newest ? bgOf(newest) : '');
+  const caption = it => [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ');
+  if (kind !== 'movie') {
+    const list = [...all].sort((a, b) => b.added - a.added);
+    return `<div class="page"><h1>Shows <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
+    <div class="grid">${list.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
+  }
+  const facts = all.map(movieFacts);
+  const decades = [...new Set(facts.map(f => decadeOf(f.year)).filter(Boolean))].sort((a, b) => b - a);
+  const countries = [...new Set(facts.flatMap(f => f.countries))].sort((a, b) => a.localeCompare(b));
+  const saved = movieView();
+  // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
+  const view = { ...saved, decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
+  const shown = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
+  const count = shown.length === all.length ? String(all.length) : `${shown.length} of ${all.length}`;
+  return `<div class="page"><h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>
+    ${movieToolbar(view, decades, countries)}
+    <div class="grid">${shown.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">No movies match these filters.</p>'}</div></div>`;
 }
 function viewGenres(sel) {
   const gcount = new Map();
@@ -821,6 +891,24 @@ function viewDetail(key) {
   const face = p => p.p
     ? `<img class="face" loading="lazy" decoding="async" src="${TMDB_IMG}${esc(p.p)}" alt="${esc(p.n)}">`
     : castPlaceholder(p.n);
+  // Same director / same cast, from this library only.
+  const namesFor = (x, kind) => {
+    const cr = x.meta?.id ? LS.get('tmdbc:' + x.meta.id) : null;
+    return kind === 'director'
+      ? [...(x.meta?.director || []), ...(cr?.crew || []).filter(p => p.r === 'Director').map(p => p.n)]
+      : [...(cr?.cast || []).slice(0, 10).map(p => p.n), ...(x.meta?.cast || []).slice(0, 10)];
+  };
+  const others = state.items.filter(x => x !== it && x.meta && (!m.id || x.meta.id !== m.id));
+  const peopleRows = [];
+  for (const [kind, label, limit] of [['director', 'More from', 2], ['cast', 'More with', 2]]) {
+    const seen = new Set();
+    for (const name of namesFor(it, kind).slice(0, kind === 'cast' ? 6 : 4)) {
+      if (peopleRows.filter(r => r.kind === kind).length >= limit) break;
+      const k = name.toLowerCase(); if (seen.has(k)) continue; seen.add(k);
+      const list = titlesWithPerson(others, name, x => namesFor(x, kind)).slice(0, 10);
+      if (list.length) peopleRows.push({ kind, name: label + ' ' + name, key: kind + '-' + name, list });
+    }
+  }
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
   return `<div class="detail"><div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
     <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
@@ -836,7 +924,8 @@ function viewDetail(key) {
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" role="button" tabindex="0" data-play="${esc(x.id)}" aria-label="${esc('Play episode ' + x.e + (e.name ? ': ' + e.name : ''))}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
     ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-prev lg" data-cast-scroll="-1" aria-label="Previous cast" aria-controls="cast-list" title="Previous cast" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
-    ${row('More like this', similar, { advance: true, genre: primaryGenre })}
+    ${peopleRows.map(r => row(r.name, r.list, { advance: true, key: r.key })).join('')}
+    ${row('More like this', similar, { advance: true, genre: primaryGenre, key: 'similar' })}
     <div style="height:40px"></div></div>`;
 }
 
@@ -1122,8 +1211,8 @@ function render() {
   const keepScroll = sig === lastRoute;
   const y = scrollY;
   const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
-  const recommendationIndex = keepScroll ? posterRailIndex($('.recommend-section .scroller')) : 0;
-  const browseScroll = keepScroll ? new Map([...document.querySelectorAll('.browse-section')].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
+  const railSections = '.recommend-section,.browse-section';
+  const railIndex = keepScroll ? new Map([...document.querySelectorAll(railSections)].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
@@ -1132,8 +1221,7 @@ function render() {
   else html = viewHome();
   $('#view').innerHTML = html;
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
-  if (keepScroll && $('.recommend-section .scroller')) $('.recommend-section .scroller').dataset.railRestoreIndex = String(recommendationIndex);
-  if (browseScroll) document.querySelectorAll('.browse-section').forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(browseScroll.get(s.dataset.rowKey) || 0); });
+  if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   scrollTo(0, keepScroll ? y : 0);
@@ -1301,17 +1389,34 @@ document.addEventListener('click', e => {
   if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
   const pi = t.closest('[data-play-item]');
   if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
+  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
+  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); $('[data-movie-view="sort"]')?.focus(); return; }
   const g = t.closest('[data-genre]');
   if (g) { location.hash = '#/genres/' + enc(g.dataset.genre); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
 $('#pclose').onclick = () => closePlayer();
+document.addEventListener('change', e => {
+  const s = e.target.closest?.('select[data-movie-view]');
+  if (s) setMovieView({ [s.dataset.movieView]: s.value }, 'select[data-movie-view="' + s.dataset.movieView + '"]');
+});
+// Cmd/Ctrl/Alt combinations belong to the browser (Cmd+F find, Cmd+K, ...). The player's own handler ignores modifiers,
+// so stop it from seeing them; the browser still gets the key because we never cancel it.
+document.addEventListener('keydown', e => {
+  if (!$('#player').hidden && (e.metaKey || e.ctrlKey || e.altKey) && (isSpaceKey(e) || /^(f|m|k|ArrowUp|ArrowDown)$/i.test(e.key))) e.stopPropagation();
+}, true);
+document.addEventListener('keyup', e => { if (isSpaceKey(e) && playerKeyTarget(e)) e.preventDefault(); });
 document.addEventListener('keydown', e => {
   // Episode rows are buttons for keyboard users too.
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.ep[data-play]')) { e.preventDefault(); play(e.target.dataset.play); return; }
-  // Left/Right arrows skip back/forward while the player is open (not while typing in a field).
-  if (!$('#player').hidden && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); seekBy(e.key === 'ArrowRight' ? SKIP_SECONDS : -SKIP_SECONDS); return; }
+  if ((e.key === 'Enter' || isSpaceKey(e)) && e.target.matches?.('.ep[data-play]')) { e.preventDefault(); play(e.target.dataset.play); return; }
+  // Player shortcuts (not while typing in a field, never with Cmd/Ctrl/Alt, so browser shortcuts keep working).
+  // The player has its own shortcuts when it has focus and marks the key as handled; never act twice.
+  if (playerKeyTarget(e) && !e.defaultPrevented) {
+    const key = isSpaceKey(e) ? ' ' : e.key.length === 1 ? e.key.toLowerCase() : e.key, action = PLAYER_KEYS[key];
+    const isArrow = key.startsWith('Arrow');
+    if (action && !(isArrow && e.shiftKey)) { e.preventDefault(); if (isArrow || !e.repeat) action(); return; }
+  }
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
@@ -1345,3 +1450,5 @@ if (location.hash === '#settings') { history.replaceState(null, '', location.pat
 render();
 load();
 loadRatings();
+// Installable app (Add to Home Screen). Registration never blocks the page.
+if ('serviceWorker' in navigator && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e)));
