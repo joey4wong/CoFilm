@@ -395,11 +395,5 @@ body{overflow-x:clip}
 @keyframes pspin{to{transform:rotate(360deg)}}
 .ep:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
 [data-theme="light"] .ep:focus-visible{outline-color:#1b202b}
-@media (prefers-reduced-motion:reduce){
-  .pspinner{animation-duration:2.4s}
-  /* Motion only. Layout, glass optics and colors are untouched. */
-  .slide,.slide .bg,#ambient,.card .pos,.lg,.pill,.rate,.dots button::before{transition:none!important}
-  .slide .bg{transform:none!important}
-  .card:hover .pos,.pill:hover,.rate:hover,.lg:hover{transform:none!important}
-}
+
 .ptop .glass-action.pclose{height:40px;padding:0 20px;font-size:14px}

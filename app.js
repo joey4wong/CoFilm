@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=86';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=87';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1277,7 +1277,7 @@ document.addEventListener('click', e => {
     const count = Number(list.dataset.railPageSize) || 1;
     const index = Math.min(Math.max(0, list.children.length - count), Math.max(0, posterRailIndex(list) + dir * count));
     list.dataset.railTargetIndex = String(index); // Preserve the requested page if metadata rerenders mid-animation.
-    list.scrollTo({ left: index * Number(list.dataset.railSpan), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    list.scrollTo({ left: index * Number(list.dataset.railSpan), behavior: 'smooth' });
     return;
   }
   const castScroll = t.closest('[data-cast-scroll]');
