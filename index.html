@@ -6,18 +6,18 @@
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0a0a0a">
-<script src="theme.js?v=85"></script>
+<script src="theme.js?v=86"></script>
 <title>CoFilm</title>
-<link rel="icon" href="favicon.ico?v=85" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=85">
-<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=85">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=85">
+<link rel="icon" href="favicon.ico?v=86" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=86">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=86">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=86">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=85">
+<link rel="stylesheet" href="style.css?v=86">
 <link rel="preconnect" href="https://image.tmdb.org">
-<link rel="modulepreload" href="lib/catalog.mjs?v=85">
+<link rel="modulepreload" href="lib/catalog.mjs?v=86">
 <link rel="preconnect" href="https://api-badgerp.svc.ms" crossorigin>
 <link rel="preconnect" href="https://my.microsoftpersonalcontent.com" crossorigin>
 <link rel="preconnect" href="https://api.themoviedb.org" crossorigin>
@@ -36,7 +36,7 @@
 <main id="view"></main>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
-<div id="search" class="overlay" hidden>
+<div id="search" class="overlay" role="dialog" aria-modal="true" aria-label="Search" hidden>
   <div class="searchbox">
     <div class="searchfield lg"><input id="q" aria-label="Search the library" type="search" autocomplete="off"></div>
     <button class="icon lg" data-close-search aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -44,12 +44,12 @@
   <div id="results" class="grid"></div>
 </div>
 
-<div id="player" class="overlay" hidden>
+<div id="player" class="overlay" role="dialog" aria-modal="true" aria-label="Video player" hidden>
   <div class="ptop"><span id="ptitle"></span><button id="pclose" class="glass-action pclose lg">Close</button></div>
   <div id="pwrap"></div>
 </div>
 
-<div id="setup" class="overlay" hidden>
+<div id="setup" class="overlay" role="dialog" aria-modal="true" aria-label="Welcome to CoFilm" hidden>
   <div class="box">
     <h2>Welcome to CoFilm</h2>
     <p>Enter your access code to start watching.</p>
@@ -65,6 +65,6 @@
     </details>
   </div>
 </div>
-<script type="module" src="app.js?v=85"></script>
+<script type="module" src="app.js?v=86"></script>
 </body>
 </html>
