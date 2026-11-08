@@ -23,3 +23,15 @@ test('a pending carousel destination survives repeated renders',()=>{const start
 function ratingFixture() {const legacyImdbRatings=new Map(),state={ratings:{}},calls={fetch:0};const context={legacyImdbRatings,state,META:'https://example.invalid',fetch:async()=>{calls.fetch++;return{ok:true,json:async()=>({meta:{imdbRating:'7.2'}})}},location:{hash:''},enc:encodeURIComponent,scheduleRender:()=>{},console};return{context,calls,f:fn('function imdbRatingOf(','function ratingsHtml(',context)};}
 test('a TMDB fallback never appears under the IMDb logo',()=>{const{f,calls}=ratingFixture();const it={meta:{id:'tt1',rating:'8.9',imdbRating:null},parsed:{kind:'movie'}};assert.equal(f(it,{}),null);assert.equal(f(it,{imdb:{v:'6.1'}}),'6.1');assert.equal(calls.fetch,0);});
 test('legacy metadata supplements only the actual IMDb source, once',async()=>{const{f,calls,context}=ratingFixture(),it={key:'test',meta:{id:'tt1',rating:'8.9'},parsed:{kind:'movie'}};assert.equal(f(it,{}),null);for(let i=0;i<5;i++)await Promise.resolve();assert.equal(f(it,{}),'7.2');assert.equal(calls.fetch,1);assert.equal(context.legacyImdbRatings.get('tt1'),'7.2');});
+
+function seekFixture(duration,currentTime) {
+  const shown=[],context={player:{duration,currentTime},SKIP_SECONDS:10,toast:(m)=>shown.push(m)};
+  return{context,shown,seekBy:fn('function seekBy(','function closePlayer(',context)};
+}
+test('arrow-key skip moves 10 seconds and stays inside the film',()=>{
+  const f=seekFixture(100,50);f.seekBy(10);assert.equal(f.context.player.currentTime,60);f.seekBy(-10);assert.equal(f.context.player.currentTime,50);
+  f.context.player.currentTime=4;f.seekBy(-10);assert.equal(f.context.player.currentTime,0);
+  f.context.player.currentTime=95;f.seekBy(10);assert.equal(f.context.player.currentTime,100);
+});
+test('skipping does nothing before the video has loaded',()=>{const f=seekFixture(0,0);f.seekBy(10);assert.equal(f.context.player.currentTime,0);assert.deepEqual(f.shown,[]);});
+test('Left/Right shortcuts are limited to an open player and not typing fields',()=>{assert.match(source,/!\$\('#player'\)\.hidden && \(e\.key === 'ArrowLeft' \|\| e\.key === 'ArrowRight'\)/);assert.match(source,/INPUT\|TEXTAREA\|SELECT/);});

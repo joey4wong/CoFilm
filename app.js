@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=87';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=88';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -494,6 +494,13 @@ async function play(fileId, restart) {
   clearInterval(saveTimer);
   saveTimer = setInterval(() => { if (player && !player.paused) savePosition(); }, 5000);
   setTimeout(() => { trySeek(); player?.play?.().catch(() => {}); }, 300);
+}
+// Keyboard skip: same step as the player's own Skip buttons.
+const SKIP_SECONDS = 10;
+function seekBy(seconds) {
+  if (!player || !(player.duration > 0)) return;
+  player.currentTime = Math.min(Math.max(0, player.currentTime + seconds), player.duration);
+  toast((seconds > 0 ? '+' : '\u2212') + Math.abs(seconds) + 's', 700);
 }
 function closePlayer(fromHistory) {
   if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
@@ -1303,6 +1310,8 @@ $('#pclose').onclick = () => closePlayer();
 document.addEventListener('keydown', e => {
   // Episode rows are buttons for keyboard users too.
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.ep[data-play]')) { e.preventDefault(); play(e.target.dataset.play); return; }
+  // Left/Right arrows skip back/forward while the player is open (not while typing in a field).
+  if (!$('#player').hidden && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); seekBy(e.key === 'ArrowRight' ? SKIP_SECONDS : -SKIP_SECONDS); return; }
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
