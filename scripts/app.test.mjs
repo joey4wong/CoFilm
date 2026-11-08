@@ -130,3 +130,22 @@ test('the player close button uses the shared Liquid Glass lens, identical in bo
   assert.doesNotMatch(css,/\.pclose[^{]*\{[^}]*backdrop-filter/);                                          // the lens comes from .lg, not a private blur
   assert.match(source,/wakePlayerBar\(\); requestAnimationFrame\(applyGlass\)/);
 });
+
+test('player controls and menus get the shared glass lens, watched without per-frame work',()=>{
+  for(const c of ['.movi-play-pause','.movi-controls-right','.movi-volume-container','.movi-time','.movi-center-play-pause'])assert.ok(source.includes(c),c);
+  for(const c of ['.movi-settings-menu','.movi-subtitle-track-menu','.movi-audio-track-menu','.movi-speed-menu','.movi-quality-menu','.movi-context-menu'])assert.ok(source.includes(c),c);
+  assert.match(source,/attributeFilter: \['class', 'hidden'\]/);assert.doesNotMatch(source,/attributeFilter: \[[^\]]*'style'/);
+  assert.match(source,/wrap\.prepend\(player\);\n  watchPlayerGlass\(player\);/);assert.match(source,/unwatchPlayerGlass\(\);/);
+  assert.match(source,/glassPlayerControls\(activeFilters\);/);           // player lenses are kept alive by the shared cache cleanup
+});
+test('a player control only gets its lens rewritten when its size actually changes',()=>{
+  const writes=[];const mk=(w,h)=>({offsetWidth:w,offsetHeight:h,style:{setProperty:(k,v)=>writes.push(k+'='+v)}});
+  const els=[mk(162,42)];const root={getElementById:()=>({}),querySelectorAll:sel=>sel.includes('play-pause')?els:[]};
+  const ctx={player:{shadowRoot:root},GLASS_ON:true,document:{},getComputedStyle:()=>({borderTopLeftRadius:'21px'}),glassFilter:(W,H,R)=>`lg-${W}x${H}-${R}`,playerGlassMO:null,playerGlassRO:null,playerGlassValue:new WeakMap(),
+    PLAYER_GLASS_CHROME:'.movi-play-pause',PLAYER_GLASS_PANELS:'.none',PLAYER_GLASS_CSS:''};
+  const {lensFor,glassPlayerControls}=fnMany(['lensFor','glassPlayerControls'],ctx);
+  glassPlayerControls(new Set());assert.equal(writes.length,2);assert.match(writes[0],/url\(#lg-162x42-21\) blur\(\.6px\)/);
+  glassPlayerControls(new Set());assert.equal(writes.length,2);                    // unchanged size: no rewrite
+  els[0].offsetWidth=200;glassPlayerControls(new Set());assert.equal(writes.length,4);assert.match(writes[2],/lg-200x42-21/);
+  els[0].offsetWidth=0;const active=new Set();glassPlayerControls(active);assert.equal(active.size,0);   // hidden controls are skipped
+});

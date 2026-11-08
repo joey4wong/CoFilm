@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=96';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=97';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -477,6 +477,7 @@ async function play(fileId, restart) {
   player.addEventListener('error', lift, { once: true });
   setTimeout(lift, 20000);                                       // never leave it covering the player
   wrap.prepend(player);
+  watchPlayerGlass(player);
   const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; }, { resumeAt: startAt });
   player.addEventListener('playing', () => { odSrc.holdAhead = false; }, { once: true });
   player.addEventListener('playing', wakePlayerBar);          // start the hide countdown when playback (re)starts
@@ -550,7 +551,7 @@ function closePlayer(fromHistory) {
   clearInterval(saveTimer);
   try { player?.pause(); } catch {}
   $('#pwrap').innerHTML = ''; player = null; current = null;
-  clearTimeout(playerIdleTimer); $('#player').classList.remove('idle');
+  clearTimeout(playerIdleTimer); $('#player').classList.remove('idle'); unwatchPlayerGlass();
   $('#player').hidden = true; document.body.style.overflow = '';
   render();
 }
@@ -981,21 +982,80 @@ function glassFilter(W, H, R, bezel, S) {
   lensCache.set(id, 1);
   return id;
 }
+// The lens for one element, sized to it exactly (a lens built for another size bends the wrong way).
+function lensFor(el) {
+  const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
+  if (!W || !H) return null;
+  const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
+  const bezel = Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
+  return glassFilter(W, H, Math.round(R), Math.round(bezel), Math.round(bezel * 3.2));
+}
+
+// ---------- Player controls: the same Liquid Glass inside movi-player's shadow DOM ----------
+// Control groups get the clear lens like the site's buttons; menus and panels get the lens plus a little more blur,
+// because their text sits over a moving picture. Always the dark glass: the player is black in both themes.
+const PLAYER_GLASS_CHROME = '.movi-play-pause,.movi-volume-container,.movi-time,.movi-controls-right,.movi-center-play-pause,.movi-top-controls .movi-btn';
+const PLAYER_GLASS_PANELS = '.movi-settings-menu,.movi-audio-track-menu,.movi-subtitle-track-menu,.movi-quality-menu,.movi-speed-menu,.movi-context-menu,.movi-osd-container,.movi-resume-dialog,.movi-shortcuts-panel,.movi-cues-panel';
+const PLAYER_GLASS_CSS = `
+:host{--movi-controls-group-bg:rgba(255,255,255,.1);--movi-glass-bg:rgba(16,16,20,.4);--movi-chrome-bg:rgba(16,16,20,.4);--movi-glass-border:transparent;--movi-chrome-border:transparent}
+:is(${PLAYER_GLASS_CHROME}){background:rgba(255,255,255,.1)!important;border:0!important;
+  -webkit-backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 30px rgba(0,0,0,.28)!important}
+:is(${PLAYER_GLASS_PANELS}){background:rgba(16,16,20,.4)!important;border:0!important;
+  -webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 20px 50px rgba(0,0,0,.45)!important}
+`;
+const playerGlassValue = new WeakMap();
+let playerGlassMO = null, playerGlassRO = null, playerGlassFrame = 0;
+function glassPlayerControls(activeFilters) {
+  const root = player?.shadowRoot;
+  if (!root) return;
+  if (!root.getElementById('cofilm-glass')) {                    // tint + rim; also the fallback where the lens is unsupported
+    const style = document.createElement('style'); style.id = 'cofilm-glass'; style.textContent = PLAYER_GLASS_CSS; root.appendChild(style);
+  }
+  if (!GLASS_ON) return;
+  for (const [selector, tail] of [[PLAYER_GLASS_CHROME, 'blur(.6px) saturate(1.5) brightness(1.05)'], [PLAYER_GLASS_PANELS, 'blur(10px) saturate(1.6) brightness(.92)']]) {
+    for (const el of root.querySelectorAll(selector)) {
+      playerGlassRO?.observe(el);                                   // a menu opening or a group growing re-fits its lens
+      const id = lensFor(el); if (!id) continue;
+      activeFilters?.add(id);
+      const value = `url(#${id}) ${tail}`;
+      if (playerGlassValue.get(el) === value) continue;
+      el.style.setProperty('backdrop-filter', value, 'important');
+      el.style.setProperty('-webkit-backdrop-filter', value, 'important');
+      playerGlassValue.set(el, value);
+    }
+  }
+  playerGlassMO?.takeRecords();                                    // our own writes are not a reason to run again
+}
+function schedulePlayerGlass() {
+  if (playerGlassFrame) return;
+  playerGlassFrame = requestAnimationFrame(() => { playerGlassFrame = 0; glassPlayerControls(); });
+}
+function watchPlayerGlass(el) {
+  unwatchPlayerGlass();
+  if (!el?.shadowRoot) return;
+  // Only structure and open/close classes, never style: the progress bar rewrites styles on every frame.
+  playerGlassMO = new MutationObserver(schedulePlayerGlass);
+  playerGlassMO.observe(el.shadowRoot, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  if (typeof ResizeObserver !== 'undefined') playerGlassRO = new ResizeObserver(schedulePlayerGlass);
+  schedulePlayerGlass();
+}
+function unwatchPlayerGlass() {
+  playerGlassMO?.disconnect(); playerGlassRO?.disconnect(); playerGlassMO = playerGlassRO = null;
+  cancelAnimationFrame(playerGlassFrame); playerGlassFrame = 0;
+}
 function applyGlass() {
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
     // The SVG lens cannot read content inside a nested scroll container, so search keeps the plain glass layer.
     if (el.closest('#search')) { el.style.removeProperty('backdrop-filter'); return; }
-    const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
-    if (!W || !H) return;
-    const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
-    const bezel = Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
-    const S = Math.round(bezel * 3.2);
-    const id = glassFilter(W, H, Math.round(R), Math.round(bezel), S);
+    const id = lensFor(el); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
+  glassPlayerControls(activeFilters);
   // Bound resize history without removing filters still used by visible glass.
   for (const id of lensCache.keys()) {
     if (lensCache.size <= 16) break;
