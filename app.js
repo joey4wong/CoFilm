@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=84';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta } from './lib/catalog.mjs?v=85';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -351,18 +351,6 @@ class ODSource {
   async getSize() { return this.size; }
   getKey() { return 'od:' + this.f.id; }
   seek(o) { return o; } getPosition() { return 0; } close() { this.cache.clear(); this.closed = true; }
-  async readSmall(offset, length, retry = 0, signal) {   // direct small range request (for scattered reads, bypasses the block cache)
-    try {
-      const r = await fetch(this.url, { signal, headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
-      if (r.status === 401 || r.status === 403 || r.status === 404) throw Object.assign(new Error('expired'), { expired: true });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.arrayBuffer();
-    } catch (e) {
-      if (retry >= 3 || this.closed || signal?.aborted) throw e;
-      if (e.expired && this.refresh) { const u = await this.refresh(); if (u) this.url = u; } else await new Promise(r => setTimeout(r, 400 * (retry + 1)));
-      return this.readSmall(offset, length, retry + 1, signal);
-    }
-  }
   _slot(fn) {
     return new Promise((res, rej) => {
       const run = () => { this.inflight++; fn().then(res, rej).finally(() => { this.inflight--; const n = this.queue.shift(); if (n) n(); }); };
@@ -427,153 +415,13 @@ class ODSource {
 }
 
 
-// ---------- Embedded MP4 subtitles (mov_text) ----------
-// In big MP4s the subtitle samples are interleaved across the whole file, which the player's own reader cannot
-// fetch efficiently over HTTP. We read the MP4 index, then fetch only the subtitle samples near the playback position.
-const LANGS = { eng: 'English', spa: 'Spanish', fra: 'French', fre: 'French', zho: 'Chinese', chi: 'Chinese', deu: 'German', ger: 'German', ita: 'Italian', jpn: 'Japanese', kor: 'Korean', por: 'Portuguese', rus: 'Russian', ara: 'Arabic', hin: 'Hindi', tha: 'Thai', nld: 'Dutch', dut: 'Dutch', swe: 'Swedish', tur: 'Turkish', pol: 'Polish', und: 'Subtitles' };
-async function readMp4Subtitles(src) {
-  const size = src.size, td = new TextDecoder();
-  // Index/header probes should not download a 4 MB video block for 16 bytes.
-  const rd = async (o, l) => new DataView(await src.readSmall(o, l));
-  let off = 0, moov = null;
-  while (off < size) {
-    const b = await rd(off, 16); let sz = b.getUint32(0); const ty = td.decode(new Uint8Array(b.buffer, 4, 4)); if (sz === 1) sz = Number(b.getBigUint64(8)); if (sz === 0) sz = size - off;
-    if (ty === 'moov') { moov = new DataView(await src.readShared(off, Math.min(sz, 64 * 1024 * 1024))); break; }   // shared with the engine
-    if (sz < 8) return [];
-    off += sz;
-  }
-  if (!moov) return [];
-  const u8 = new Uint8Array(moov.buffer), t4 = o => td.decode(u8.subarray(o, o + 4));
-  const kids = (s, e) => { const r = []; let p = s; while (p + 8 <= e) { let sz = moov.getUint32(p); const ty = t4(p + 4); let h = 8; if (sz === 1) { sz = Number(moov.getBigUint64(p + 8)); h = 16; } if (sz < 8) break; r.push({ ty, s: p + h, e: p + sz }); p += sz; } return r; };
-  const find = (n, ty) => kids(n.s, n.e).find(k => k.ty === ty);
-  const tracks = [];
-  for (const tk of kids(8, moov.byteLength).filter(k => k.ty === 'trak')) {
-    try {
-      const mdia = find(tk, 'mdia'), hdlr = find(mdia, 'hdlr'), htype = t4(hdlr.s + 8);
-      if (htype !== 'sbtl' && htype !== 'text' && htype !== 'subt') continue;
-      const mdhd = find(mdia, 'mdhd'), ver = moov.getUint8(mdhd.s);
-      const ts = ver === 1 ? moov.getUint32(mdhd.s + 20) : moov.getUint32(mdhd.s + 12);
-      const lp = moov.getUint16(ver === 1 ? mdhd.s + 32 : mdhd.s + 20);
-      const lang = String.fromCharCode(((lp >> 10) & 31) + 96, ((lp >> 5) & 31) + 96, (lp & 31) + 96);
-      const stbl = find(find(mdia, 'minf'), 'stbl'), stsd = find(stbl, 'stsd');
-      const fmt = t4(stsd.s + 12); if (fmt !== 'tx3g') continue;
-      const stts = find(stbl, 'stts'), stsc = find(stbl, 'stsc'), stsz = find(stbl, 'stsz'), stco = find(stbl, 'stco') || find(stbl, 'co64');
-      const n = moov.getUint32(stsz.s + 8), fixed = moov.getUint32(stsz.s + 4);
-      const sizes = new Array(n); for (let i = 0; i < n; i++) sizes[i] = fixed || moov.getUint32(stsz.s + 12 + i * 4);
-      const nc = moov.getUint32(stco.s + 4), is64 = stco.ty === 'co64';
-      const cho = i => is64 ? Number(moov.getBigUint64(stco.s + 8 + i * 8)) : moov.getUint32(stco.s + 8 + i * 4);
-      const ns = moov.getUint32(stsc.s + 4), sc = []; for (let i = 0; i < ns; i++) sc.push([moov.getUint32(stsc.s + 8 + i * 12), moov.getUint32(stsc.s + 12 + i * 12)]);
-      const offs = new Array(n); let si = 0;
-      for (let c = 0; c < nc && si < n; c++) {
-        let spc = 0; for (let k = 0; k < sc.length; k++) if (sc[k][0] <= c + 1) spc = sc[k][1];
-        let o = cho(c); for (let j = 0; j < spc && si < n; j++, si++) { offs[si] = o; o += sizes[si]; }
-      }
-      const ne = moov.getUint32(stts.s + 4), times = new Array(n), durs = new Array(n); let ti = 0, tt = 0;
-      for (let e = 0; e < ne; e++) { const cnt = moov.getUint32(stts.s + 8 + e * 8), d = moov.getUint32(stts.s + 12 + e * 8); for (let k = 0; k < cnt && ti < n; k++, ti++) { times[ti] = tt / ts; durs[ti] = d / ts; tt += d; } }
-      tracks.push({ lang, n, offs, sizes, times, durs, loaded: new Uint8Array(n) });
-    } catch (e) { console.warn('subtitle track parse', e); }
-  }
-  return tracks;
-}
-function startEmbeddedSubs(el, src, playToken) {
-  let timer = 0, job = null, generation = 0, tracks = [], engine = null, nativeTracks = null;
-  const td = new TextDecoder();
-  const stopJob = () => { generation++; job?.controller.abort(); job = null; };
-  const wake = () => { stopJob(); if (!playToken.dead) pulse(); };
-  playToken.stop = () => {
-    playToken.dead = true; stopJob(); clearInterval(timer);
-    el.removeEventListener('seeking', wake);
-    el.removeEventListener('subtitletrackchange', onChoice);
-  };
-  function onChoice() {
-    const lang = el.getSubtitleLangs?.().find(t => t.active)?.lang || null;
-    if (job && lang !== job.lang) wake(); else pulse();
-  }
-  function register() {
-    if (engine || !el.player || !el.duration) return !!engine;
-    engine = el.player;
-    // The same tx3g streams must not appear both as demuxer tracks and generated cues.
-    // This guarded adapter is for the pinned movi-player version; keep other codecs intact.
-    nativeTracks = engine.getSubtitleTracks.bind(engine);
-    const original = nativeTracks();
-    const active = engine.trackManager?.getActiveSubtitleTrack?.();
-    const managed = original.filter(t => /^(mov_text|tx3g)$/i.test(t.codec) && tracks.some(x => x.lang === t.language));
-    const selectedNative = managed.find(t => t.id === active?.id);
-    const nativeVariant = selectedNative ? managed.filter(t => t.language === selectedNative.language).findIndex(t => t.id === selectedNative.id) : -1;
-    engine.getSubtitleTracks = () => nativeTracks().filter(t => !/^(mov_text|tx3g)$/i.test(t.codec) || !tracks.some(x => x.lang === t.language));
-    for (const t of tracks) el.appendSubtitleCues([], { lang: t.key, label: t.label, pending: false });
-    const external = el.getSubtitleLangs?.().find(t => t.active);
-    let remembered = null;
-    try { remembered = localStorage.getItem('movi:pref:subtitlelang'); } catch {}
-    const preferred = tracks.find(t => t.key === remembered) || tracks.find(t => t.lang === remembered);
-    if (!external && remembered !== 'off') {
-      const chosen = tracks.filter(t => t.lang === selectedNative?.language)[nativeVariant] || preferred || (!playToken.external ? tracks[0] : null);
-      if (chosen) el.selectSubtitleLang(chosen.key);
-    }
-    el.updateSubtitleTrackMenu?.(); el.refreshOpenContextMenu?.();
-    return true;
-  }
-  async function loadWindow(t, from, to, task) {
-    const idx = [];
-    for (let i = 0; i < t.n; i++) if (!t.loaded[i] && t.sizes[i] > 2 && t.times[i] <= to && t.times[i] + t.durs[i] > from) idx.push(i);
-    // Cover the currently visible cue first, not every cue in a four-minute batch.
-    idx.sort((a, b) => Math.abs(t.times[a] - task.position) - Math.abs(t.times[b] - task.position));
-    let k = 0;
-    await Promise.all(Array.from({ length: Math.min(4, idx.length) }, async () => {
-      while (k < idx.length && !playToken.dead && task.generation === generation) {
-        const i = idx[k++];
-        try {
-          const b = new Uint8Array(await src.readSmall(t.offs[i], t.sizes[i], 0, task.controller.signal));
-          if (playToken.dead || task.generation !== generation) return;
-          const len = (b[0] << 8) | b[1];
-          const text = td.decode(b.subarray(2, 2 + len)).replace(/\r/g, '').trim();
-          // Publish every completed cue immediately. Never wait for unrelated requests.
-          if (!text || el.appendSubtitleCues([{ start: t.times[i], end: t.times[i] + Math.max(t.durs[i], 1.2), text }], { lang: t.key, label: t.label, pending: false })) t.loaded[i] = 1;
-        } catch (e) { /* An aborted seek or temporary network error is retried near the new position. */ }
-      }
-    }));
-  }
-  function pulse() {
-    if (playToken.dead || !tracks.length || !register() || job) return;
-    // Wait for RESUME's initial seek instead of fetching subtitles from minute zero.
-    if (playToken.startAt && Math.abs((el.currentTime || 0) - playToken.startAt) > 5 && !playToken.positionReady) return;
-    playToken.positionReady = true;
-    const chosen = el.getSubtitleLangs?.().find(t => t.active)?.lang;
-    const t = tracks.find(t => t.key === chosen);
-    if (!t) return; // Off or an external SRT: don't fetch other languages unnecessarily.
-    const position = el.currentTime || 0;
-    const task = { controller: new AbortController(), generation, lang: t.key, position };
-    job = task;
-    (async () => {
-      await loadWindow(t, Math.max(0, position - 3), position + 12, task);
-      if (!playToken.dead && task.generation === generation) await loadWindow(t, position + 12, position + 60, task);
-    })().catch(e => console.warn('subtitle window', e)).finally(() => { if (job === task) job = null; });
-  }
-  (async () => {
-    try { tracks = await readMp4Subtitles(src); } catch (e) { console.warn('embedded subs', e); return; }
-    if (!tracks.length || playToken.dead) return;
-    // Keep distinct tracks, including alternate/forced versions. Remove only duplicate paths.
-    const counts = {}, numbered = {};
-    for (const t of tracks) counts[t.lang] = (counts[t.lang] || 0) + 1;
-    for (const t of tracks) {
-      const n = numbered[t.lang] = (numbered[t.lang] || 0) + 1;
-      t.key = 'emb-' + t.lang + (n > 1 ? '-' + n : '');
-      t.label = (LANGS[t.lang] || t.lang.toUpperCase()) + (counts[t.lang] > 1 ? ' (' + n + ')' : '');
-    }
-    tracks.sort((a, b) => (a.lang === 'eng' ? 0 : 1) - (b.lang === 'eng' ? 0 : 1));
-    el.addEventListener('seeking', wake);
-    el.addEventListener('subtitletrackchange', onChoice);
-    timer = setInterval(pulse, 1000); pulse();
-  })();
-}
-
 // ---------- player ----------
 // Keep the multi-megabyte player off the browsing path. Download only when PLAY/RESUME is pressed.
 let playerLib = null;
 function loadPlayerLib() {
   return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js').catch(e => { playerLib = null; throw e; });
 }
-let player = null, saveTimer = 0, current = null, embTok = null;
+let player = null, saveTimer = 0, current = null;
 // Fetch the ~11 MB engine when a viewer shows intent (opens a film, touches PLAY), never at site startup.
 function warmPlayer() {
   if (navigator.connection?.saveData) return;
@@ -632,9 +480,6 @@ async function play(fileId, restart) {
   const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; }, { resumeAt: startAt });
   player.addEventListener('playing', () => { odSrc.holdAhead = false; }, { once: true });
   player.sourceAdapter = odSrc;
-  if (embTok) embTok.stop?.();
-  embTok = { dead: false, external: f.subs.length > 0, startAt };
-  if (/\.(mp4|m4v|mov)$/i.test(f.name)) startEmbeddedSubs(player, odSrc, embTok);
   let seeked = false;
   // Safety net only: if the engine ignored startat, seek once.
   const trySeek = () => { if (!seeked && startAt && player.duration > 0) { seeked = true; if (Math.abs(player.currentTime - startAt) > 5) player.currentTime = startAt; } };
@@ -652,7 +497,6 @@ async function play(fileId, restart) {
 }
 function closePlayer(fromHistory) {
   if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
-  if (embTok) embTok.stop?.();
   savePosition();
   clearInterval(saveTimer);
   try { player?.pause(); } catch {}

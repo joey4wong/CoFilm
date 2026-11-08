@@ -22,4 +22,4 @@ The ratings workflow is scheduled every 3 hours (GitHub may delay scheduled runs
 The access code is a convenience gate, not server-side authorization. Anyone with the underlying anonymous OneDrive share link can read that shared folder; changing the website code does not revoke an already-disclosed link. Revoke or replace the OneDrive share link when access must be withdrawn.
 
 ## Deliberately unchanged
-Playback range caching, resume positions, external/embedded subtitle pipelines, movie-grid columns, cast paging and poster-arrow click isolation are not rewritten by this maintenance pass. Further module extraction should be incremental, not a framework migration.
+Playback range caching, resume positions, sidecar subtitle loading, movie-grid columns, cast paging and poster-arrow click isolation are not rewritten by this maintenance pass. Further module extraction should be incremental, not a framework migration.
