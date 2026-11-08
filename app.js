@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=97';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=98';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1000,7 +1000,12 @@ const PLAYER_GLASS_CSS = `
 :host{--movi-controls-group-bg:rgba(255,255,255,.1);--movi-glass-bg:rgba(16,16,20,.4);--movi-chrome-bg:rgba(16,16,20,.4);--movi-glass-border:transparent;--movi-chrome-border:transparent}
 :is(${PLAYER_GLASS_CHROME}){background:rgba(255,255,255,.1)!important;border:0!important;
   -webkit-backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);
-  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 30px rgba(0,0,0,.28)!important}
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)!important}
+/* Same rim as the site's .lg glass (and the close button): a specular glint at two corners, not a white outline. */
+:is(${PLAYER_GLASS_CHROME}):not(.movi-center-play-pause){position:relative}
+:is(${PLAYER_GLASS_CHROME})::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
+  background:linear-gradient(140deg,rgba(255,255,255,.7) 0%,rgba(255,255,255,.18) 10%,rgba(255,255,255,0) 24%,rgba(255,255,255,0) 76%,rgba(255,255,255,.14) 90%,rgba(255,255,255,.45) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
 :is(${PLAYER_GLASS_PANELS}){background:rgba(16,16,20,.4)!important;border:0!important;
   -webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6);
   box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 20px 50px rgba(0,0,0,.45)!important}

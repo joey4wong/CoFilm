@@ -149,3 +149,10 @@ test('a player control only gets its lens rewritten when its size actually chang
   els[0].offsetWidth=200;glassPlayerControls(new Set());assert.equal(writes.length,4);assert.match(writes[2],/lg-200x42-21/);
   els[0].offsetWidth=0;const active=new Set();glassPlayerControls(active);assert.equal(active.size,0);   // hidden controls are skipped
 });
+
+test('player control groups use the corner glint rim, not a uniform white outline',()=>{
+  const css=source.slice(source.indexOf('const PLAYER_GLASS_CSS'),source.indexOf('const playerGlassValue'));
+  assert.doesNotMatch(css,/inset 0 0 0 \.5px rgba\(255,255,255,\.18\),inset 0 1px 0 rgba\(255,255,255,\.3\),inset 0 -12px/);
+  assert.match(css,/::after\{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px/);
+  assert.match(css,/linear-gradient\(140deg,rgba\(255,255,255,\.7\) 0%/);   // identical to the site's .lg rim
+});
