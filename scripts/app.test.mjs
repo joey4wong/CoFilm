@@ -37,7 +37,7 @@ test('skipping does nothing before the video has loaded',()=>{const f=seekFixtur
 test('player shortcuts are limited to an open player, never typing fields or Cmd/Ctrl/Alt',()=>{
   const open={hidden:false},context={$:()=>open};
   const from=source.indexOf('const playerKeyTarget = ')+'const playerKeyTarget = '.length;
-  const ok=vm.runInNewContext('const isSpaceKey = e => e.key === \' \' || e.code === \'Space\'; ('+source.slice(from,source.indexOf(';\nfunction closePlayer(',from))+')',context);
+  const ok=vm.runInNewContext('const isSpaceKey = e => e.key === \' \' || e.code === \'Space\'; ('+source.slice(from,source.indexOf(';\n',from))+')',context);
   const ev=(extra={})=>({key:'f',altKey:false,ctrlKey:false,metaKey:false,target:{tagName:'DIV',id:''},...extra});
   assert.equal(ok(ev()),true);
   assert.equal(ok(ev({target:{tagName:'INPUT'}})),false);
@@ -102,4 +102,24 @@ test('Genres lives in the Movies toolbar; the nav has no Genres tab and old link
 
 test('the genre list shows plain names in A to Z order, without counts',()=>{
   assert.match(source,/genres\.map\(g => \[g, g\]\)/);assert.doesNotMatch(source,/g \+ ' \\u00b7 ' \+ n/);assert.match(source,/localeCompare\(y\)\);   \/\/ A to Z, no counts/);
+});
+
+test('player header: hides after 3 s of playing, but never while paused, hovered or when Close has focus',()=>{
+  const classes=new Set(),timers=[];const box={hidden:false,classList:{add:c=>classes.add(c),remove:c=>classes.delete(c)},querySelector:()=>({matches:()=>ctx.hover}),contains:()=>ctx.closeFocused};
+  const closeBtn={},ctx={player:{paused:false},hover:false,closeFocused:false,$:s=>s==='#player'?box:closeBtn,document:{get activeElement(){return ctx.closeFocused?closeBtn:null}},playerIdleTimer:0,
+    setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length},clearTimeout:()=>{}};
+  const {wakePlayerBar}=fnMany(['wakePlayerBar'],ctx);
+  wakePlayerBar();assert.equal(timers.at(-1).ms,3000);timers.at(-1).f();assert.equal(classes.has('idle'),true);
+  wakePlayerBar();assert.equal(classes.has('idle'),false);                                  // activity shows it again
+  ctx.player.paused=true;timers.at(-1).f();assert.equal(classes.has('idle'),false);          // paused: stay visible
+  ctx.player.paused=false;ctx.hover=true;wakePlayerBar();timers.at(-1).f();assert.equal(classes.has('idle'),false);
+  ctx.hover=false;ctx.closeFocused=true;wakePlayerBar();timers.at(-1).f();assert.equal(classes.has('idle'),false);
+  box.hidden=true;ctx.closeFocused=false;wakePlayerBar();timers.at(-1).f();assert.equal(classes.has('idle'),false);
+});
+test('player header never uses the frosted overlay layer and is the same in both themes',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/#player::before\{display:none\}/);
+  assert.doesNotMatch(css,/\[data-theme="light"\][^{]*(\.ptop|#pclose|\.pclose|#player)/);
+  assert.match(css,/\.ptop\{position:absolute/);assert.match(css,/#player\.idle \.ptop\{opacity:0\}/);
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="pclose" class="pclose"[^>]*aria-label="Close player"/);assert.doesNotMatch(html,/Close<\/button>/);
 });

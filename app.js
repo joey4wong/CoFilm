@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=94';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=95';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -443,7 +443,7 @@ async function play(fileId, restart) {
   $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
   const wrap = $('#pwrap');
   wrap.innerHTML = `<div class="ploading"${it.meta?.background ? ` style="background-image:url('${esc(it.meta.background)}')"` : ''}><span class="pspinner" aria-label="Loading"></span></div>`;
-  $('#player').hidden = false; document.body.style.overflow = 'hidden';
+  $('#player').hidden = false; document.body.style.overflow = 'hidden'; wakePlayerBar();
   if (!history.state?.player) history.pushState({ player: true }, '', location.href);  // Back closes the player
   f = await freshFile(f);
   current = { it, f };
@@ -479,6 +479,8 @@ async function play(fileId, restart) {
   wrap.prepend(player);
   const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; }, { resumeAt: startAt });
   player.addEventListener('playing', () => { odSrc.holdAhead = false; }, { once: true });
+  player.addEventListener('playing', wakePlayerBar);          // start the hide countdown when playback (re)starts
+  player.addEventListener('pause', wakePlayerBar);            // a paused video always shows the header
   player.sourceAdapter = odSrc;
   let seeked = false;
   // Safety net only: if the engine ignored startat, seek once.
@@ -530,12 +532,25 @@ const PLAYER_KEYS = {
 };
 const isSpaceKey = e => e.key === ' ' || e.code === 'Space';   // by value or by key position, so every keyboard layout works
 const playerKeyTarget = e => !$('#player').hidden && !e.altKey && !e.ctrlKey && !e.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(isSpaceKey(e) && e.target.id === 'pclose');
+// The header hides after 3 s without activity while the video plays; any movement, tap or key brings it back.
+let playerIdleTimer = 0;
+function wakePlayerBar() {
+  const box = $('#player');
+  box.classList.remove('idle');
+  clearTimeout(playerIdleTimer);
+  playerIdleTimer = setTimeout(() => {
+    const bar = box.querySelector('.ptop');
+    if (box.hidden || !player || player.paused || bar.matches(':hover') || box.contains(document.activeElement) && document.activeElement === $('#pclose')) return;
+    box.classList.add('idle');
+  }, 3000);
+}
 function closePlayer(fromHistory) {
   if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
   savePosition();
   clearInterval(saveTimer);
   try { player?.pause(); } catch {}
   $('#pwrap').innerHTML = ''; player = null; current = null;
+  clearTimeout(playerIdleTimer); $('#player').classList.remove('idle');
   $('#player').hidden = true; document.body.style.overflow = '';
   render();
 }
@@ -1390,6 +1405,7 @@ document.addEventListener('click', e => {
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
 $('#pclose').onclick = () => closePlayer();
+for (const type of ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'focusin']) $('#player').addEventListener(type, () => wakePlayerBar(), { passive: true });
 document.addEventListener('change', e => {
   const s = e.target.closest?.('select[data-movie-view]');
   if (s) setMovieView({ [s.dataset.movieView]: s.value }, 'select[data-movie-view="' + s.dataset.movieView + '"]');
