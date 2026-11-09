@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=100';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=101';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -738,7 +738,7 @@ const creditsPending = new Set();
 function creditsOf(it) {
   const id = it.meta?.id; if (!id) return null;
   const c = LS.get('tmdbc:' + id);
-  if (c?.v === 2 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
+  if (c?.v === 3 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
   const key = LS.get('tmdb:key');
   if (key && !creditsPending.has(id)) {
     creditsPending.add(id);
@@ -747,14 +747,14 @@ function creditsOf(it) {
         let hit, f = { movie_results: [], tv_results: [] };
         if (it.meta.tmdbId) { hit = { id: it.meta.tmdbId }; if (it.parsed.kind === 'series') f.tv_results = [hit]; else f.movie_results = [hit]; }
         else { f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json(); hit = (f.movie_results || [])[0] || (f.tv_results || [])[0]; }
-        if (!hit) { LS.set('tmdbc:' + id, { v: 2, cast: [], crew: [], t: Date.now() }); return; }
+        if (!hit) { LS.set('tmdbc:' + id, { v: 3, cast: [], crew: [], t: Date.now() }); return; }
         const tv = !(f.movie_results || [])[0];
         const res = await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`);
         if (!res.ok) throw new Error('Credits returned ' + res.status);
         const cr = await res.json();
-        const cast = (cr.cast || []).map(p => ({ n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
-        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).map(p => ({ n: p.name, r: 'Director', p: p.profile_path }));
-        LS.set('tmdbc:' + id, { v: 2, cast, crew, t: Date.now() });
+        const cast = (cr.cast || []).map(p => ({ i: p.id, n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
+        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).map(p => ({ i: p.id, n: p.name, r: 'Director', p: p.profile_path }));
+        LS.set('tmdbc:' + id, { v: 3, cast, crew, t: Date.now() });
         delete it._st; // New cast/roles must be searchable without a reload.
         if (location.hash.includes(enc(it.key))) render();
       } catch (e) { console.warn('tmdb', e); }
@@ -762,6 +762,45 @@ function creditsOf(it) {
     })();
   }
   return c || null;
+}
+
+// ---------- Person page: TMDB biography + this person's titles that are in the library ----------
+const personPending = new Set(), personFailed = new Set(), bioOpen = new Set();
+function personOf(id) {
+  const c = LS.get('tmdbp:' + id);
+  if (c?.v === 1 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
+  const key = LS.get('tmdb:key');
+  if (key && !personPending.has(id) && !personFailed.has(id)) {
+    personPending.add(id);
+    (async () => {
+      try {
+        const res = await fetch(`${TMDB_API}/person/${id}?api_key=${key}&append_to_response=combined_credits`);
+        if (!res.ok) throw new Error('Person returned ' + res.status);
+        LS.set('tmdbp:' + id, compactPerson(await res.json()));
+      } catch (e) { console.warn('person', e); personFailed.add(id); }
+      finally { personPending.delete(id); const r = routeInfo(); if (r.name === 'person' && r.arg === id) render(); }
+    })();
+  }
+  return c || null;                                              // an expired record is shown while it refreshes
+}
+function viewPerson(id) {
+  const back = '<button type="button" class="back-link" data-back>\u2190 Back</button>';
+  if (!/^\d+$/.test(id)) return `<div class="page person-page">${back}<p class="empty">Person not found.</p></div>`;
+  if (!LS.get('tmdb:key')) return `<div class="page person-page">${back}<p class="empty">Add a TMDB key in Settings to see cast details.</p></div>`;
+  const p = personOf(id);
+  if (!p) return `<div class="page person-page">${back}<p class="empty">${personFailed.has(id) ? 'Could not load this person. <button type="button" class="back-link" data-person-retry="' + esc(id) + '">Try again</button>' : 'Loading\u2026'}</p></div>`;
+  const items = state.items.map(it => ({ key: it.key, type: it.parsed.kind === 'series' ? 'tv' : 'movie', tmdbId: it.meta?.tmdbId }));
+  const byKey = new Map(state.items.map(it => [it.key, it]));
+  const mine = libraryMatches(items, p).map(x => ({ it: byKey.get(x.key), role: x.role })).sort((x, y) => (parseInt(yearOf(y.it), 10) || 0) - (parseInt(yearOf(x.it), 10) || 0));
+  setAmbient(mine[0] ? bgOf(mine[0].it) : '');
+  const open = bioOpen.has(id), long = p.bio.length > 700;
+  const bio = p.bio ? `<div class="person-bio${long && !open ? ' clamped' : ''}">${p.bio.split(/\n{2,}/).map(t => '<p>' + esc(t) + '</p>').join('')}</div>${long ? `<button type="button" class="bio-toggle" data-bio-toggle="${esc(id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read more'}</button>` : ''}` : '';
+  const photo = p.photo ? `<img class="face" src="https://image.tmdb.org/t/p/w500${esc(p.photo)}" alt="${esc(p.name)}">` : castPlaceholder(p.name);
+  return `<div class="page person-page">${back}
+    <div class="person-head"><div class="person-photo person">${photo}</div>
+      <div class="person-info"><h1>${esc(p.name)}</h1>${lifeLine(p) ? `<div class="person-meta">${esc(lifeLine(p))}</div>` : ''}${bio}</div></div>
+    <section class="row"><h2>In your library</h2>
+      <div class="grid">${mine.map(x => card(x.it, { caption: [yearOf(x.it), x.role].filter(Boolean).join(' \u00b7 ') })).join('') || '<p class="empty">None of this person\u2019s titles are in your library yet.</p>'}</div></section></div>`;
 }
 
 // ---------- external ratings (IMDb / Rotten Tomatoes / Douban), fetched by a GitHub Action, encrypted ----------
@@ -951,7 +990,7 @@ function viewDetail(key) {
     </div>
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
     ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" role="button" tabindex="0" data-play="${esc(x.id)}" aria-label="${esc('Play episode ' + x.e + (e.name ? ': ' + e.name : ''))}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => `<div class="person">${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div></div>`).join('')}</div><button class="cast-prev lg" data-cast-scroll="-1" aria-label="Previous cast" aria-controls="cast-list" title="Previous cast" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
+    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => { const inner = `${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div>`; return p.i ? `<a class="person" href="#/person/${p.i}" aria-label="${esc(p.n + (p.r ? ', ' + p.r : ''))}">${inner}</a>` : `<div class="person">${inner}</div>`; }).join('')}</div><button class="cast-prev lg" data-cast-scroll="-1" aria-label="Previous cast" aria-controls="cast-list" title="Previous cast" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
     ${peopleRows.map(r => row(r.name, r.list, { advance: true, key: r.key })).join('')}
     ${row('More like this', similar, { advance: true, genre: primaryGenre, key: 'similar' })}
     <div style="height:40px"></div></div>`;
@@ -1290,11 +1329,13 @@ window.addEventListener('cofilmthemechange', scheduleNavContrast);
 function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
   if (h.startsWith('/t/')) return { name: 'detail', arg: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith('/person/')) return { name: 'person', arg: h.slice(8).split(/[/?]/)[0] };
   if (h.startsWith('/movies')) return { name: 'movies' };
   if (h.startsWith('/shows')) return { name: 'shows' };
   return { name: 'home' };
 }
 let lastRoute = '';
+const savedScroll = new Map();
 function render() {
   closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
@@ -1312,19 +1353,23 @@ function render() {
   const railIndex = keepScroll ? new Map([...document.querySelectorAll(railSections)].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
+  else if (r.name === 'person') html = viewPerson(r.arg);
   else if (r.name === 'movies') html = viewList('movie');
   else if (r.name === 'shows') html = viewList('series');
   else html = viewHome();
   $('#view').innerHTML = html;
   // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
-  const tinted = r.name === 'detail' || r.name === 'home', rootEl = document.documentElement;
+  const tinted = r.name === 'detail' || r.name === 'home' || r.name === 'person', rootEl = document.documentElement;
   rootEl.classList.toggle('film-tint', tinted);
   if (tinted !== (rootEl.dataset.themeLock === 'dark')) { if (tinted) rootEl.dataset.themeLock = 'dark'; else delete rootEl.dataset.themeLock; window.cofilmRefreshTheme?.(); }
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
-  scrollTo(0, keepScroll ? y : 0);
+  // Coming back from a person page returns to where you were on the film page.
+  const cameFromPerson = !keepScroll && lastRoute.startsWith('#/person/') && savedScroll.has(sig);
+  if (!keepScroll && lastRoute) savedScroll.set(lastRoute, y);
+  scrollTo(0, keepScroll ? y : cameFromPerson ? savedScroll.get(sig) : 0);
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
   if (r.name === 'detail') setTimeout(() => { if (routeInfo().name === 'detail') warmPlayer(); }, 1200);
@@ -1444,7 +1489,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbp|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 
 // ---------- resize: one layout pass per frame ----------
 let resizeFrame = 0;
@@ -1494,6 +1539,11 @@ document.addEventListener('click', e => {
   if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
   const pi = t.closest('[data-play-item]');
   if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
+  if (t.closest('[data-back]')) { e.preventDefault(); if (history.length > 1) history.back(); else location.hash = '#/'; return; }
+  const bio = t.closest('[data-bio-toggle]');
+  if (bio) { const id = bio.dataset.bioToggle; if (bioOpen.has(id)) bioOpen.delete(id); else bioOpen.add(id); render(); return; }
+  const retry = t.closest('[data-person-retry]');
+  if (retry) { personFailed.delete(retry.dataset.personRetry); render(); return; }
   if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
   if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); $('[data-movie-view="sort"]')?.focus(); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseName, keyOf, isFreshMeta, tscore, sortMovieFacts, filterMovieFacts, decadeOf, titleSortKey, titlesWithPerson, personKey } from '../lib/catalog.mjs';
+import { parseName, keyOf, isFreshMeta, tscore, sortMovieFacts, filterMovieFacts, decadeOf, titleSortKey, titlesWithPerson, personKey, compactPerson, libraryMatches, formatDay, lifeLine } from '../lib/catalog.mjs';
 
 test('movie filename keeps its stable progress/cache key', () => {
   const p = parseName('Konigin.der.Nacht.2017.1080p.AMZN.WEB-DL.DDP2.0.H.264.mkv');
@@ -33,4 +33,21 @@ test('genre filter matches any listed genre and combines with the other filters'
   assert.deepEqual(names(filterMovieFacts(g,{genre:'Drama',only4k:true})),['C']);
   assert.deepEqual(names(filterMovieFacts(g,{genre:'Western'})),[]);assert.equal(filterMovieFacts(g,{genre:''}).length,3);
   assert.equal(filterMovieFacts([{...g[0],genres:undefined}],{genre:'Drama'}).length,0);   // titles without metadata never crash
+});
+
+test('a TMDB person record is reduced to what the page needs',()=>{
+  const p=compactPerson({name:'Silke Bodenbender',biography:'  Born in Bonn.  ',birthday:'1974-01-12',place_of_birth:'Bonn, Germany',profile_path:'/a.jpg',combined_credits:{cast:[{media_type:'movie',id:402637,character:'Inga'},{media_type:'person',id:9},{media_type:'tv',id:5,character:'Anna'}],crew:[{media_type:'movie',id:7,job:'Director'}]}},123);
+  assert.equal(p.bio,'Born in Bonn.');assert.equal(p.t,123);assert.deepEqual(p.cast,[['movie',402637,'Inga'],['tv',5,'Anna']]);assert.deepEqual(p.crew,[['movie',7,'Director']]);
+  assert.deepEqual(compactPerson({name:'X'}).cast,[]);assert.equal(compactPerson({name:'X'}).bio,'');
+});
+test('library titles are matched by TMDB id and type, never by name',()=>{
+  const person={cast:[['movie',10,'Hero'],['tv',20,'Guest']],crew:[['movie',30,'Writer'],['movie',30,'Director'],['movie',40,'Producer']]};
+  const items=[{key:'a',type:'movie',tmdbId:10},{key:'b',type:'movie',tmdbId:20},{key:'c',type:'tv',tmdbId:20},{key:'d',type:'movie',tmdbId:30},{key:'e',type:'movie',tmdbId:99},{key:'f',type:'movie',tmdbId:null},{key:'g',type:'movie',tmdbId:'40'}];
+  assert.deepEqual(libraryMatches(items,person),[{key:'a',role:'Hero'},{key:'c',role:'Guest'},{key:'d',role:'Director'},{key:'g',role:'Producer'}]);   // movie 20 is not tv 20; Director wins over other jobs
+  assert.deepEqual(libraryMatches(items,{cast:[],crew:[]}),[]);
+});
+test('life dates read naturally and empty parts are skipped',()=>{
+  assert.equal(formatDay('1974-01-12'),'January 12, 1974');assert.equal(formatDay(''),'');assert.equal(formatDay('1974'),'');
+  assert.equal(lifeLine({birth:'1974-01-12',place:'Bonn, Germany'}),'Born January 12, 1974 \u00b7 Bonn, Germany');
+  assert.equal(lifeLine({birth:'1920-03-01',death:'1999-05-02',place:''}),'Born March 1, 1920 \u00b7 Died May 2, 1999');assert.equal(lifeLine({}),'');
 });

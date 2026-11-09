@@ -443,3 +443,24 @@ body{overflow-x:clip}
 .trailer-close{position:absolute;right:0;bottom:calc(100% + 12px)}
 @keyframes trailer-in{from{opacity:0}to{opacity:1}}
 @media (max-width:600px){.trailer-modal{padding:12px}.trailer-frame{border-radius:12px}}
+
+/* Cast cards are links to the person page */
+a.person{display:block;color:inherit}
+a.person:hover .n{text-decoration:underline}
+a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4px;border-radius:12px}
+/* Person page */
+.back-link{display:inline-flex;align-items:center;margin:0 var(--pad) 22px;padding:8px 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font-size:14px;color:rgba(255,255,255,.85)}
+.back-link:hover{background:rgba(255,255,255,.14)}
+.back-link:focus-visible,.bio-toggle:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
+.person-head{display:flex;align-items:flex-start;gap:clamp(20px,3vw,40px);padding:0 var(--pad);margin-bottom:46px}
+.person-photo{flex:0 0 clamp(150px,17vw,240px)}
+.person-photo .face{width:100%;aspect-ratio:4/5;border-radius:10px;object-fit:cover;display:flex;box-shadow:0 14px 40px rgba(0,0,0,.4)}
+.person-info{min-width:0;max-width:760px}
+.person-info h1{margin:0 0 10px;font-size:clamp(32px,4.2vw,56px);line-height:1.04;letter-spacing:-.02em}
+.person-meta{margin-bottom:20px;font-size:14.5px;letter-spacing:.03em;color:var(--muted)}
+.person-bio{font-size:16px;line-height:1.7;color:rgba(255,255,255,.92)}
+.person-bio p{margin:0 0 12px}
+.person-bio.clamped{display:-webkit-box;-webkit-line-clamp:9;-webkit-box-orient:vertical;overflow:hidden}
+.bio-toggle{margin-top:4px;padding:6px 0;font-size:14px;color:var(--muted);text-decoration:underline}
+.bio-toggle:hover{color:#fff}
+@media (max-width:600px){.person-head{flex-direction:column;gap:18px}.person-photo{flex-basis:auto;width:150px}.person-bio.clamped{-webkit-line-clamp:12}}

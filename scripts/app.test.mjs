@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { libraryMatches, lifeLine } from '../lib/catalog.mjs';
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 function fn(name,next,context) { const start=source.indexOf(name),end=source.indexOf(next,start); assert.ok(start>=0&&end>start); return vm.runInNewContext('('+source.slice(start,end).trim()+')',context); }
 function libraryFixture(entry) {
@@ -181,4 +182,37 @@ test('home and film pages take the film colours like the reference: one blurred 
   assert.doesNotMatch(css,/page-detail/);
   assert.match(source,/const tinted = r\.name === 'detail' \|\| r\.name === 'home'/);
   const theme=fs.readFileSync(new URL('../theme.js',import.meta.url),'utf8');assert.match(theme,/root\.dataset\.themeLock \|\|/);assert.match(theme,/window\.cofilmRefreshTheme = refreshTheme/);
+});
+
+test('cast cards link to the person page when the TMDB person id is known; credits cache is v3',()=>{
+  assert.match(source,/href=\"#\/person\/\$\{p\.i\}\"/);assert.match(source,/c\?\.v === 3 && Date\.now\(\)/);assert.doesNotMatch(source,/v: 2, cast/);
+  assert.match(source,/\{ i: p\.id, n: p\.name, r: p\.character/);assert.match(source,/\{ i: p\.id, n: p\.name, r: 'Director'/);
+});
+test('person route, tinted look, remembered scroll, and cache clearing are wired in',()=>{
+  assert.match(source,/startsWith\('\/person\/'\)\) return \{ name: 'person'/);assert.match(source,/else if \(r\.name === 'person'\) html = viewPerson\(r\.arg\)/);
+  assert.match(source,/r\.name === 'detail' \|\| r\.name === 'home' \|\| r\.name === 'person'/);assert.match(source,/cameFromPerson/);assert.match(source,/tmdbc\|tmdbp\|tmdbt/);
+});
+function personPageFixture(over={}) {
+  const store={},shown={bg:null};
+  const ctx={LS:{get:k=>k==='tmdb:key'?(over.noKey?null:'key'):(store[k]??null)},personOf:id=>over.person??null,personFailed:new Set(over.failed||[]),bioOpen:new Set(over.open||[]),state:{items:over.items||[]},
+    esc:s=>String(s),yearOf:it=>String(it.year||''),card:(it,o)=>'<card '+it.key+' '+o.caption+'>',bgOf:it=>'bg-'+it.key,setAmbient:u=>{shown.bg=u},castPlaceholder:n=>'<placeholder '+n+'>',
+    libraryMatches,lifeLine};
+  return{ctx,shown,view:fnMany(['viewPerson'],ctx).viewPerson};
+}
+test('person page: bio, library films with their role, and graceful empty states',()=>{
+  const items=[{key:'movie:queen|2017',year:2016,parsed:{kind:'movie'},meta:{tmdbId:402637}},{key:'movie:other|2000',year:2000,parsed:{kind:'movie'},meta:{tmdbId:1}}];
+  const person={v:1,name:'Silke Bodenbender',bio:'Short bio.',birth:'1974-01-12',place:'Bonn',photo:'/a.jpg',cast:[['movie',402637,'Inga']],crew:[]};
+  const f=personPageFixture({person,items});const html=f.view('123');
+  assert.match(html,/Silke Bodenbender/);assert.match(html,/Born January 12, 1974/);assert.match(html,/Short bio\./);assert.match(html,/<card movie:queen\|2017 2016 \u00b7 Inga>/);assert.doesNotMatch(html,/movie:other/);assert.equal(f.shown.bg,'bg-movie:queen|2017');
+  assert.doesNotMatch(html,/bio-toggle/);                                                   // short bio: no Read more
+  const none=personPageFixture({person:{...person,bio:'',cast:[]},items}).view('123');assert.doesNotMatch(html.replace(/Short bio\./,''),/person-bio.*undefined/);assert.doesNotMatch(none,/person-bio/);assert.match(none,/None of this person/);   // no bio: section omitted
+});
+test('person page: long bios collapse with Read more, bad ids and missing key are handled',()=>{
+  const long={v:1,name:'A',bio:'x'.repeat(800),birth:'',place:'',photo:'',cast:[],crew:[]};
+  const closed=personPageFixture({person:long}).view('5'),open=personPageFixture({person:long,open:['5']}).view('5');
+  assert.match(closed,/person-bio clamped/);assert.match(closed,/Read more/);assert.match(open,/Show less/);assert.doesNotMatch(open,/clamped/);
+  assert.match(personPageFixture().view('abc'),/Person not found/);
+  assert.match(personPageFixture({noKey:true}).view('5'),/Add a TMDB key/);
+  assert.match(personPageFixture({failed:['5']}).view('5'),/Try again/);
+  assert.match(personPageFixture().view('5'),/Loading/);
 });
