@@ -260,13 +260,24 @@ test('decodeImage decodes each hero picture once and tolerates failures',async()
 });
 test('home warms the other hero pictures one by one',()=>{assert.match(source,/if \(r\.name === 'home'\) \{ startHero\(\); warmHero\(\);/);assert.match(source,/for \(let i = 0; i < hero\.list\.length; i\+\+\) await decodeImage\(slideImage\(i\)\)/);});
 
-test('phones held upright show the whole backdrop; a poster used as artwork keeps the full wall',()=>{
+test('phones held upright: textless poster or poster fallback as the full wall, else the whole 16:9 backdrop',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
   const block=css.slice(css.indexOf('@media (max-width:820px) and (max-aspect-ratio:1/1){'));
-  assert.match(block,/\.film-tint :is\(\.slide \.bg,\.detail > \.bg\):not\(\.art-tall\)\{[^}]*height:56\.25vw;background-size:100% auto/);
-  assert.doesNotMatch(block,/background-size:cover/);assert.doesNotMatch(css,/\.art-tall\{background-size:auto 100%/);
-  assert.match(block,/\.film-tint \.hero\{height:calc\(56\.25vw \+ 366px\)/);
-  assert.match(block,/\.detail:not\(:has\(> \.bg\.art-tall\)\) \.dtop\{min-height:0;justify-content:flex-start;padding-top:calc\(56\.25vw - 28px\)/);
+  assert.match(block,/\.has-wall\{background-image:var\(--wall\)!important;background-size:cover/);
+  assert.match(block,/:not\(\.art-tall\):not\(\.has-wall\)\{inset:0 0 auto 0;height:56\.25vw;background-size:100% auto/);
+  assert.match(block,/\.detail:not\(:has\(> \.bg:is\(\.art-tall,\.has-wall\)\)\) \.dtop\{min-height:0/);
+});
+test('bestWall picks the best-rated textless portrait poster and ignores posters with text or too small',()=>{
+  const {bestWall}=fnMany(['bestWall'],{});
+  assert.equal(bestWall({posters:[{iso_639_1:'en',file_path:'/en.jpg',width:1000,height:1500,vote_average:9},{iso_639_1:null,file_path:'/a.jpg',width:1000,height:1500,vote_average:5.2},{iso_639_1:null,file_path:'/b.jpg',width:2000,height:3000,vote_average:5.6},{iso_639_1:null,file_path:'/tiny.jpg',width:300,height:450,vote_average:9}]}),'https://image.tmdb.org/t/p/w780/b.jpg');
+  assert.equal(bestWall({posters:[{iso_639_1:'de',file_path:'/x.jpg',width:1000,height:1500}]}),'');
+  assert.equal(bestWall({}),'');
+});
+test('walls are fetched only for phones held upright, cached 30 days, and cleared with the cache',()=>{
+  assert.match(source,/if \(!key \|\| !phoneWallMedia\(\)\) return;/);
+  assert.match(source,/include_image_language=null/);
+  assert.match(source,/tmdbt\|tmdbw\):/);
+  assert.match(source,/ensureArtwork\(\); applyWalls\(\); ensureWalls\(\);/);
 });
 test('artwork that is not landscape is flagged and shown whole on phones; landscape stays untouched',()=>{
   const els=[],mk=()=>{const cls=new Set();return{dataset:{art:JSON.stringify(['wide.jpg'])},style:{backgroundImage:'url("wide.jpg")'},classList:{add:c=>cls.add(c),remove:c=>cls.delete(c),toggle:(c,on)=>on?cls.add(c):cls.delete(c)},cls}};

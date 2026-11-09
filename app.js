@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=108';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=110';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -598,6 +598,48 @@ const yearOf = it => String(it.meta?.year || it.parsed.year || '').slice(0, 4);
 const logoOf = it => it.meta?.id ? (it.meta.logo || `https://images.metahub.space/logo/medium/${it.meta.id}/img`) : '';
 const posterOf = it => it.meta?.id ? it.meta.poster : it.metaPending ? '' : it.files[0].thumb;
 const bgOf = it => it.meta?.background || posterOf(it) || (it.metaPending ? '' : it.files[0].thumb) || '';
+// ---------- Phone wall: TMDB's textless portrait poster ----------
+// On a phone held upright a portrait poster fills the screen with its subject composed for that shape, so it can run
+// behind the title and PLAY (like watched.cx) without cropping people out. Only TMDB posters with no language
+// (textless) are used, so they never clash with the page's own title. Films without one keep the 16:9 layout.
+const WALL_MAX_AGE = 30 * 864e5;
+const phoneWallMedia = () => window.matchMedia?.('(max-width:820px) and (max-aspect-ratio:1/1)').matches;
+const wallKey = it => it?.meta?.tmdbId ? 'tmdbw:' + (it.parsed?.kind === 'series' ? 'tv' : 'movie') + ':' + it.meta.tmdbId : '';
+function wallOf(it) {
+  const c = wallKey(it) && LS.get(wallKey(it));
+  return c && typeof c.u === 'string' ? c.u : '';
+}
+function bestWall(images) {
+  const list = (images?.posters || []).filter(p => p.iso_639_1 == null && p.file_path && p.height >= 750 && p.width < p.height);
+  list.sort((x, y) => (y.vote_average || 0) - (x.vote_average || 0) || (y.vote_count || 0) - (x.vote_count || 0) || (y.height || 0) - (x.height || 0));
+  return list[0] ? 'https://image.tmdb.org/t/p/w780' + list[0].file_path : '';
+}
+const wallPending = new Set();
+async function ensureWalls() {
+  const key = LS.get('tmdb:key');
+  if (!key || !phoneWallMedia()) return;
+  const wanted = [...new Set([...document.querySelectorAll('.bg[data-wall-key]')].map(el => el.dataset.wallKey))];
+  for (const k of wanted) {
+    const it = state.items.find(x => x.key === k), ck = wallKey(it);
+    if (!ck || wallPending.has(ck)) continue;
+    const c = LS.get(ck);
+    if (c && Date.now() - (c.t || 0) < WALL_MAX_AGE) continue;
+    wallPending.add(ck);
+    try {
+      const res = await fetch(`${TMDB_API}/${it.parsed.kind === 'series' ? 'tv' : 'movie'}/${it.meta.tmdbId}/images?api_key=${key}&include_image_language=null`);
+      if (res.ok) LS.set(ck, { u: bestWall(await res.json()), t: Date.now() });   // '' = checked, none: keep the 16:9 layout
+    } catch {} finally { wallPending.delete(ck); }
+  }
+  applyWalls();
+}
+function applyWalls() {
+  document.querySelectorAll('.bg[data-wall-key]').forEach(el => {
+    const it = state.items.find(x => x.key === el.dataset.wallKey), u = it && !el.classList.contains('art-tall') ? wallOf(it) : '';
+    if (u) el.style.setProperty('--wall', `url("${u}")`); else el.style.removeProperty('--wall');
+    el.classList.toggle('has-wall', !!u);
+  });
+  const slide = document.querySelector('.slide.on'); if (slide) requestAnimationFrame(() => { layoutLightArtwork(); updateNavContrast(); });
+}
 function tmdbPath(u) {
   return (String(u || '').match(/\/t\/p\/[^/]+(\/.+)$/) || [])[1] || '';
 }
@@ -700,7 +742,7 @@ function viewHome() {
   const cw = items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).map(x => x.it);
   const rated = items.filter(it => parseFloat(it.meta?.rating) >= 7).sort((a, b) => parseFloat(b.meta.rating) - parseFloat(a.meta.rating));
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
-      <div class="bg${artIsPoster(it) ? ' art-tall' : ''}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
+      <div class="bg${artIsPoster(it) ? ' art-tall' : !artIsPoster(it) && wallOf(it) ? ' has-wall' : ''}" data-wall-key="${esc(it.key)}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')${!artIsPoster(it) && wallOf(it) ? `;--wall:url('${esc(wallOf(it))}')` : ''}"></div>
       <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
@@ -1014,7 +1056,7 @@ function viewDetail(key) {
     }
   }
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
-  return `<div class="detail"><div class="bg${artIsPoster(it) ? ' art-tall' : ''}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
+  return `<div class="detail"><div class="bg${artIsPoster(it) ? ' art-tall' : !artIsPoster(it) && wallOf(it) ? ' has-wall' : ''}" data-wall-key="${esc(it.key)}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')${!artIsPoster(it) && wallOf(it) ? `;--wall:url('${esc(wallOf(it))}')` : ''}"></div>
     <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
       <p class="desc">${esc(m.desc || 'No details found for this title. Use the edit button below to fix the match.')}</p>
       <div class="hbtns">
@@ -1165,6 +1207,7 @@ function applyGlass() {
 }
 window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGlass));
 let glassT = 0;
+window.matchMedia?.('(max-width:820px) and (max-aspect-ratio:1/1)').addEventListener?.('change', () => ensureWalls());
 window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
 // ---------- Touch devices swipe rails directly; pointer devices keep the arrow buttons ----------
@@ -1411,7 +1454,7 @@ function render() {
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
   if (r.name === 'detail') setTimeout(() => { if (routeInfo().name === 'detail') warmPlayer(); }, 1200);
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); updateNavContrast(); });
+  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); applyWalls(); ensureWalls(); settleLightArtwork(); updateNavContrast(); });
 }
 // Hero pictures are large. Decode each one BEFORE its cross-fade starts, so the animation never waits on a decode
 // (that wait showed up as roughly a second of 10-20 fps every time the slide changed).
@@ -1421,7 +1464,11 @@ function decodeImage(url) {
   if (!decodedImages.has(url)) { const img = new Image(); img.src = url; decodedImages.set(url, (img.decode ? img.decode() : Promise.resolve()).catch(() => {})); }
   return decodedImages.get(url);
 }
-const slideImage = i => (document.querySelector(`.slide[data-i="${i}"] .bg`)?.style.backgroundImage.match(/url\(["']?([^"')]+)/) || [])[1] || '';
+function slideImage(i) {
+  const bg = document.querySelector(`.slide[data-i="${i}"] .bg`);
+  const src = bg?.classList.contains('has-wall') && phoneWallMedia() ? bg.style.getPropertyValue('--wall') : bg?.style.backgroundImage;
+  return (String(src || '').match(/url\(["']?([^"')]+)/) || [])[1] || '';
+}
 let heroSwitch = 0, heroWarmKey = '';
 function showSlide(i) {
   if (!hero.list.length) return;
@@ -1548,7 +1595,7 @@ $('#saveLink').onclick = () => {
   LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
-$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbp|tmdbt):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
+$('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbp|tmdbt|tmdbw):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 
 // ---------- resize: one layout pass per frame ----------
 let resizeFrame = 0;
