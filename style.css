@@ -477,7 +477,7 @@ a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4p
    Instead the picture spans the full width at its natural 16:9 shape, and the page colour (the same picture, blurred)
    continues below it, with the title and text on that colour. */
 @media (max-width:820px) and (max-aspect-ratio:1/1){
-  .film-tint .hero{height:calc(56.25vw + 380px);min-height:0}
+  .film-tint .hero{height:calc(56.25vw + 366px);min-height:0}
   .film-tint .hero .hcontent{top:calc(56.25vw - 14px);bottom:auto}
   .film-tint .slide .bg,.film-tint .detail > .bg{inset:0 0 auto 0;height:56.25vw;background-size:100% auto;background-position:center top;background-repeat:no-repeat;transform:none;transition:none;
     -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%)}

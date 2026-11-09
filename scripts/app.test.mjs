@@ -265,6 +265,6 @@ test('phones held upright show the whole backdrop instead of a centre crop',()=>
   const block=css.slice(css.indexOf('@media (max-width:820px) and (max-aspect-ratio:1/1){'));
   assert.match(block,/\.film-tint \.slide \.bg,\.film-tint \.detail > \.bg\{[^}]*height:56\.25vw;background-size:100% auto/);
   assert.doesNotMatch(block,/background-size:cover/);
-  assert.match(block,/\.film-tint \.hero\{height:calc\(56\.25vw \+ 400px\)/);
+  assert.match(block,/\.film-tint \.hero\{height:calc\(56\.25vw \+ 366px\)/);
   assert.match(block,/\.dtop\{min-height:0;justify-content:flex-start;padding-top:calc\(56\.25vw - 28px\)/);
 });
