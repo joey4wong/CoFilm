@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=107';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=108';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -598,6 +598,14 @@ const yearOf = it => String(it.meta?.year || it.parsed.year || '').slice(0, 4);
 const logoOf = it => it.meta?.id ? (it.meta.logo || `https://images.metahub.space/logo/medium/${it.meta.id}/img`) : '';
 const posterOf = it => it.meta?.id ? it.meta.poster : it.metaPending ? '' : it.files[0].thumb;
 const bgOf = it => it.meta?.background || posterOf(it) || (it.metaPending ? '' : it.files[0].thumb) || '';
+function tmdbPath(u) {
+  return (String(u || '').match(/\/t\/p\/[^/]+(\/.+)$/) || [])[1] || '';
+}
+// True when the page picture is really the poster (TMDB has no backdrop): it is tall, so it is used as a full wall.
+function artIsPoster(it) {
+  const p = tmdbPath(it.meta?.poster), b = tmdbPath(bgOf(it));
+  return !!p && p === b;
+}
 const artCandidates = it => [...new Set([it.meta?.background, posterOf(it), it.files[0].thumb].filter(Boolean))];
 const enc = k => encodeURIComponent(k);
 function quality(f) {
@@ -692,7 +700,7 @@ function viewHome() {
   const cw = items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).map(x => x.it);
   const rated = items.filter(it => parseFloat(it.meta?.rating) >= 7).sort((a, b) => parseFloat(b.meta.rating) - parseFloat(a.meta.rating));
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
-      <div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
+      <div class="bg${artIsPoster(it) ? ' art-tall' : ''}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
       <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
@@ -713,10 +721,18 @@ const countriesOf = it => String(it.meta?.country || '').split(',').map(s => s.t
 function movieFacts(it) {
   return { it, title: title(it), year: parseInt(yearOf(it), 10) || null, countries: countriesOf(it), genres: it.meta?.genres || [], rating: parseFloat(it.meta?.rating) || 0, is4k: quality(it.files[0]) === '4K', added: it.added };
 }
+// Keep the keyboard position after the page redraws. A <select> must never be focused from code on a touch screen:
+// iPhone Safari answers by opening its picker (that was the stray "Recently Added" popup after Reset).
+function keepFocus(selector) {
+  const el = selector && $(selector);
+  if (!el) return;
+  if (el.tagName === 'SELECT' && window.matchMedia?.('(hover: none)').matches) return;
+  el.focus();
+}
 function setMovieView(patch, focus) {
   LS.set('view:movies', { ...movieView(), ...patch });
   render();
-  if (focus) $(focus)?.focus();       // keep keyboard position after the page redraws
+  keepFocus(focus);
 }
 function movieToolbar(view, genres, decades, countries) {
   const select = (name, label, options, value) => `<label class="sel"><span>${label}</span><select data-movie-view="${name}" aria-label="${label}">${options.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
@@ -998,7 +1014,7 @@ function viewDetail(key) {
     }
   }
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
-  return `<div class="detail"><div class="bg" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
+  return `<div class="detail"><div class="bg${artIsPoster(it) ? ' art-tall' : ''}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')"></div>
     <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
       <p class="desc">${esc(m.desc || 'No details found for this title. Use the edit button below to fix the match.')}</p>
       <div class="hbtns">
@@ -1588,7 +1604,7 @@ document.addEventListener('click', e => {
   const retry = t.closest('[data-person-retry]');
   if (retry) { personFailed.delete(retry.dataset.personRetry); render(); return; }
   if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
-  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); $('[data-movie-view="sort"]')?.focus(); return; }
+  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-view="sort"]'); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });

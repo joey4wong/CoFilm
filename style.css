@@ -475,15 +475,14 @@ a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4p
 /* Phones held upright: show the WHOLE backdrop, never crop it.
    A 16:9 picture forced into a tall screen with `cover` keeps only its middle third, which often misses the people.
    Instead the picture spans the full width at its natural 16:9 shape, and the page colour (the same picture, blurred)
-   continues below it, with the title and text on that colour. */
+   continues below it, with the title and text on that colour.
+   When there is no backdrop and the poster is used instead (`.art-tall`), the poster stays the full-screen wall as before. */
 @media (max-width:820px) and (max-aspect-ratio:1/1){
   .film-tint .hero{height:calc(56.25vw + 366px);min-height:0}
   .film-tint .hero .hcontent{top:calc(56.25vw - 14px);bottom:auto}
-  .film-tint .slide .bg,.film-tint .detail > .bg{inset:0 0 auto 0;height:56.25vw;background-size:100% auto;background-position:center top;background-repeat:no-repeat;transform:none;transition:none;
+  .film-tint :is(.slide .bg,.detail > .bg):not(.art-tall){inset:0 0 auto 0;height:56.25vw;background-size:100% auto;background-position:center top;background-repeat:no-repeat;transform:none;transition:none;
     -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%)}
-  /* A tall picture (poster) is shown whole, centred, instead of only its top third. */
-  .film-tint :is(.slide .bg,.detail > .bg).art-tall{background-size:auto 100%;background-position:center top}
-  .film-tint .slide::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%);-webkit-mask-image:none;mask-image:none}
-  .film-tint .detail .bg::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%)}
-  .film-tint .detail .dtop{min-height:0;justify-content:flex-start;padding-top:calc(56.25vw - 28px)}
+  .film-tint .slide:not(:has(> .bg.art-tall))::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%);-webkit-mask-image:none;mask-image:none}
+  .film-tint .detail .bg:not(.art-tall)::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%)}
+  .film-tint .detail:not(:has(> .bg.art-tall)) .dtop{min-height:0;justify-content:flex-start;padding-top:calc(56.25vw - 28px)}
 }
