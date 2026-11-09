@@ -43,7 +43,7 @@ main{min-height:100vh}
 .metarow svg{width:15px;height:15px;vertical-align:-2px;margin-right:5px}
 .metarow .star{fill:#f5c518;stroke:none}
 /* 4K badge: quiet champagne on smoked glass instead of a loud red. */
-.tag{background:rgba(255,255,255,.12);color:#f1dfb6;box-shadow:inset 0 0 0 1px rgba(241,223,182,.32);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font-weight:600;font-size:12px;letter-spacing:.08em;padding:2px 10px;border-radius:999px}
+.tag{background:rgba(70,62,48,.5);color:#f1dfb6;box-shadow:inset 0 0 0 1px rgba(241,223,182,.32);font-weight:600;font-size:12px;letter-spacing:.08em;padding:2px 10px;border-radius:999px}
 .desc{line-height:1.65;color:rgba(255,255,255,.92);text-shadow:0 1px 8px rgba(0,0,0,.4);margin:0 0 30px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;font-size:clamp(15px,1.15vw,18px)}
 .hbtns{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .dots{position:absolute;right:calc(var(--pad) - 16px);bottom:calc(17% - 32px);z-index:3;display:flex;align-items:center;gap:0;padding:12px 16px;background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;pointer-events:auto;touch-action:manipulation;user-select:none}
@@ -66,7 +66,7 @@ main{min-height:100vh}
 .card img{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;display:block}
 .card .q,.card .bar{z-index:2}
 .card .ph{position:absolute;inset:0;display:flex;align-items:flex-end;padding:14px;font-weight:700;font-size:17px;line-height:1.2}
-.card .q{position:absolute;top:10px;left:10px;background:rgba(14,14,18,.5);color:#f1dfb6;box-shadow:inset 0 0 0 1px rgba(241,223,182,.3);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font-size:11px;font-weight:600;letter-spacing:.06em;padding:1px 9px;border-radius:999px}
+.card .q{position:absolute;top:10px;left:10px;background:rgba(24,22,20,.68);color:#f1dfb6;box-shadow:inset 0 0 0 1px rgba(241,223,182,.3);font-size:11px;font-weight:600;letter-spacing:.06em;padding:1px 9px;border-radius:999px}
 .card .bar{position:absolute;left:10px;right:10px;bottom:10px;height:4px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden}
 .card .bar i{display:block;height:100%;background:#fff}
 .card .cap{margin-top:10px;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -494,3 +494,7 @@ a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4p
   .film-tint .detail .bg:is(.art-tall,.has-wall)::after{background:linear-gradient(180deg,rgba(5,5,8,.42),rgba(5,5,8,.04) 20%,rgba(5,5,8,.12) 36%,rgba(5,5,8,.5) 52%,rgba(5,5,8,.66) 78%,rgba(5,5,8,.5))}
   .film-tint .slide:has(> .bg:is(.art-tall,.has-wall))::after{background:linear-gradient(180deg,rgba(5,5,8,.42),rgba(5,5,8,.08) 22%,rgba(5,5,8,.34) 48%,rgba(5,5,8,.62) 82%,rgba(5,5,8,.5))}
 }
+
+/* While search is open the page behind it is covered; stop painting the big blurred colour layer (iPhone Safari struggles
+   with a large filter layer under a backdrop-filter overlay). Badges and cards never use backdrop-filter. */
+.search-open #ambient{visibility:hidden!important}

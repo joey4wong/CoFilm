@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=112';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=113';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1567,8 +1567,8 @@ function renderSearch() {
     (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
   fitSearchGrid(); requestAnimationFrame(fitSearchGrid);  // the scrollbar may appear after layout
 }
-function openSearch() { $('#search').hidden = false; document.body.style.overflow = 'hidden'; renderSearch(); requestAnimationFrame(fitSearchGrid); requestAnimationFrame(applyGlass); setTimeout(() => $('#q').focus(), 50); }
-function closeSearch() { $('#search').hidden = true; document.body.style.overflow = ''; }
+function openSearch() { $('#search').hidden = false; document.documentElement.classList.add('search-open'); document.body.style.overflow = 'hidden'; renderSearch(); requestAnimationFrame(fitSearchGrid); requestAnimationFrame(applyGlass); setTimeout(() => $('#q').focus(), 50); }
+function closeSearch() { $('#search').hidden = true; document.documentElement.classList.remove('search-open'); document.body.style.overflow = ''; }
 $('#q').oninput = renderSearch;
 $('#searchLink').onclick = e => { e.preventDefault(); openSearch(); };
 

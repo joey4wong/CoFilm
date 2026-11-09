@@ -309,8 +309,16 @@ test('iPhone fullscreen keeps the film upright and inside the visible screen',()
   assert.match(source,/:host\(\.movi-pseudo-fullscreen\)\{height:100vh!important;height:100dvh!important;[^}]*transform:none!important/);
 });
 
-test('4K badges use the soft champagne style, not red',()=>{
+test('4K badges are soft champagne, not red, and never use backdrop-filter (nested glass froze iPhone search)',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
   assert.doesNotMatch(css,/#e0332f/);
   assert.match(css,/\.card \.q\{[^}]*color:#f1dfb6/);assert.match(css,/\.tag\{[^}]*color:#f1dfb6/);
+  assert.doesNotMatch(css.match(/\.card \.q\{[^}]*\}/)[0],/backdrop-filter/);assert.doesNotMatch(css.match(/\.tag\{[^}]*\}/)[0],/backdrop-filter/);
+  assert.match(css,/\.search-open #ambient\{visibility:hidden!important\}/);
+});
+
+test('opening and closing search toggles the search-open class on the page',()=>{
+  const cls=new Set();const ctx={$:s=>({hidden:true,value:''}),document:{documentElement:{classList:{add:c=>cls.add(c),remove:c=>cls.delete(c)}},body:{style:{}}},renderSearch(){},requestAnimationFrame(){},fitSearchGrid(){},applyGlass(){},setTimeout(){}};
+  const {openSearch,closeSearch}=fnMany(['openSearch','closeSearch'],ctx);
+  openSearch();assert.equal(cls.has('search-open'),true);closeSearch();assert.equal(cls.has('search-open'),false);
 });
