@@ -481,6 +481,8 @@ a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4p
   .film-tint .hero .hcontent{top:calc(56.25vw - 14px);bottom:auto}
   .film-tint .slide .bg,.film-tint .detail > .bg{inset:0 0 auto 0;height:56.25vw;background-size:100% auto;background-position:center top;background-repeat:no-repeat;transform:none;transition:none;
     -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 66%,rgba(0,0,0,.6) 84%,transparent 100%)}
+  /* A tall picture (poster) is shown whole, centred, instead of only its top third. */
+  .film-tint :is(.slide .bg,.detail > .bg).art-tall{background-size:auto 100%;background-position:center top}
   .film-tint .slide::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%);-webkit-mask-image:none;mask-image:none}
   .film-tint .detail .bg::after{background:linear-gradient(180deg,rgba(5,5,8,.38),transparent 22%)}
   .film-tint .detail .dtop{min-height:0;justify-content:flex-start;padding-top:calc(56.25vw - 28px)}

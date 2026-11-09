@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=106';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=107';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1271,13 +1271,14 @@ function ensureArtwork() {
     let list; try { list = JSON.parse(el.dataset.art || '[]'); } catch { return; }
     const current = el.style.backgroundImage.replace(/^url\(["']?/, '').replace(/["']?\)$/, '');
     const start = Math.max(0, list.indexOf(current));
-    const apply = url => { el.style.backgroundImage = 'url("' + url + '")'; el.classList.remove('art-missing'); };
+    // A picture that is not landscape (e.g. a poster used because TMDB has no backdrop) is flagged so phones can show it whole.
+    const apply = (url, ratio) => { el.style.backgroundImage = 'url("' + url + '")'; el.classList.remove('art-missing'); el.classList.toggle('art-tall', ratio > 0 && ratio < 1.4); };
     const tryAt = i => {
       if (i >= list.length) { el.classList.add('art-missing'); return; }
       const url = list[i];
-      if (artChecked.has(url)) { artChecked.get(url) ? apply(url) : tryAt(i + 1); return; }
+      if (artChecked.has(url)) { artChecked.get(url) ? apply(url, artChecked.get(url)) : tryAt(i + 1); return; }
       const probe = new Image();
-      probe.onload = () => { artChecked.set(url, true); apply(url); };
+      probe.onload = () => { const ratio = probe.naturalWidth / (probe.naturalHeight || 1) || 1.78; artChecked.set(url, ratio); apply(url, ratio); };
       probe.onerror = () => { artChecked.set(url, false); tryAt(i + 1); };
       probe.src = url;
     };

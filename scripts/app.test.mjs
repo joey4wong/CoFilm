@@ -268,3 +268,13 @@ test('phones held upright show the whole backdrop instead of a centre crop',()=>
   assert.match(block,/\.film-tint \.hero\{height:calc\(56\.25vw \+ 366px\)/);
   assert.match(block,/\.dtop\{min-height:0;justify-content:flex-start;padding-top:calc\(56\.25vw - 28px\)/);
 });
+
+test('artwork that is not landscape is flagged and shown whole on phones; landscape stays untouched',()=>{
+  const els=[],mk=()=>{const cls=new Set();return{dataset:{art:JSON.stringify(['wide.jpg'])},style:{backgroundImage:'url("wide.jpg")'},classList:{add:c=>cls.add(c),remove:c=>cls.delete(c),toggle:(c,on)=>on?cls.add(c):cls.delete(c)},cls}};
+  const sizes={'wide.jpg':[1280,720],'tall.jpg':[1280,1920]};
+  const ctx={artChecked:new Map(),document:{querySelectorAll:()=>els},Image:function(){Object.defineProperty(this,'src',{set:u=>{this.naturalWidth=sizes[u][0];this.naturalHeight=sizes[u][1];setImmediate(()=>this.onload())}})}};
+  const {ensureArtwork}=fnMany(['ensureArtwork'],ctx);
+  const w=mk(),p=mk();p.dataset.art=JSON.stringify(['tall.jpg']);p.style.backgroundImage='url("tall.jpg")';els.push(w,p);ensureArtwork();
+  return new Promise(r=>setTimeout(()=>{assert.equal(w.cls.has('art-tall'),false);assert.equal(p.cls.has('art-tall'),true);
+    const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');assert.match(css,/\.art-tall\{background-size:auto 100%;background-position:center top\}/);r()},20));
+});
