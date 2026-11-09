@@ -317,11 +317,28 @@ test('4K badges are soft champagne, not red, and never use backdrop-filter (nest
   assert.match(css,/\.search-open :is\(#ambient,#view,#nav\)\{visibility:hidden!important\}/);assert.match(css,/\.search-open #search::before\{-webkit-backdrop-filter:none!important;backdrop-filter:none!important/);
 });
 
-test('search: focus happens inside the tap (iPhone keyboard), hero pauses while open and resumes on Home',()=>{
+test('search: touch screens go to the #/search page; mouse screens still open the layer, hero pauses while it is open',()=>{
   const cls=new Set(),log=[];const q={hidden:true,value:'',focus:o=>log.push('focus')};const search={hidden:true};
-  const ctx={$:s=>s==='#q'?q:search,document:{documentElement:{classList:{add:c=>cls.add(c),remove:c=>cls.delete(c)}},body:{style:{}}},renderSearch:()=>log.push('render'),requestAnimationFrame(){},fitSearchGrid(){},applyGlass(){},stopHero:()=>log.push('stop'),startHero:()=>log.push('start'),routeInfo:()=>({name:'home'})};
-  const {openSearch,closeSearch}=fnMany(['openSearch','closeSearch'],ctx);
+  const base=touch=>({$:s=>s==='#q'?q:search,document:{documentElement:{classList:{add:c=>cls.add(c),remove:c=>cls.delete(c)}},body:{style:{}}},renderSearch:()=>log.push('render'),requestAnimationFrame(){},fitSearchGrid(){},applyGlass(){},stopHero:()=>log.push('stop'),startHero:()=>log.push('start'),routeInfo:()=>({name:'home'}),searchOnPage:()=>touch,location:{hash:'#/'}});
+  const mouse=base(false);const {openSearch,closeSearch}=fnMany(['openSearch','closeSearch'],mouse);
   openSearch();assert.equal(cls.has('search-open'),true);assert.deepEqual(log,['stop','focus','render']);
   closeSearch();assert.equal(cls.has('search-open'),false);assert.equal(log.at(-1),'start');
+  log.length=0;const finger=base(true);const o2=fnMany(['openSearch'],finger).openSearch;o2();
+  assert.equal(finger.location.hash,'#/search');assert.deepEqual(log,[]);assert.equal(search.hidden,true);   // no layer, nothing shown
+  assert.match(source,/if \(searchOnPage\(\)\) \{ if \(routeInfo\(\)\.name !== 'search'\) location\.hash = '#\/search'; return; \}/);
   assert.doesNotMatch(source,/setTimeout\(\(\) => \$\('#q'\)\.focus\(\), 50\)/);
+});
+test('search page: route, field settings for iPhone, and live results without the layer',()=>{
+  assert.match(source,/if \(h\.startsWith\('\/search'\)\) return \{ name: 'search' \};/);
+  assert.match(source,/else if \(r\.name === 'search'\) html = viewSearch\(\);/);
+  assert.match(source,/type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"/);
+  assert.match(source,/document\.addEventListener\('input', e => \{ if \(e\.target\.id !== 'sq'\) return;/);
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/\.search-page \.sfield input\{[^}]*font-size:17px/);assert.doesNotMatch(css.match(/\.search-page \.sfield input\{[^}]*\}/)[0],/backdrop-filter/);
+});
+test('searchHtml: all films newest first when empty, filtered and counted when typing',()=>{
+  const items=[{key:'a',added:1},{key:'b',added:2}];
+  const ctx={state:{items},fold:s=>String(s).toLowerCase(),searchText:it=>it.key,title:it=>it.key,card:it=>'<c '+it.key+'>',yearOf:()=>'',parsed:{},};
+  const {searchHtml}=fnMany(['searchHtml'],ctx);
+  assert.equal(searchHtml(''),'<c b><c a>');assert.match(searchHtml('a'),/1 result<\/p><c a>/);assert.match(searchHtml('zzz'),/0 results<\/p><p class="empty">No results/);
 });

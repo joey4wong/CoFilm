@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=114';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=115';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1421,6 +1421,7 @@ function routeInfo() {
   const h = location.hash.replace(/^#/, '') || '/';
   if (h.startsWith('/t/')) return { name: 'detail', arg: decodeURIComponent(h.slice(3)) };
   if (h.startsWith('/person/')) return { name: 'person', arg: h.slice(8).split(/[/?]/)[0] };
+  if (h.startsWith('/search')) return { name: 'search' };
   if (h.startsWith('/movies')) return { name: 'movies' };
   if (h.startsWith('/shows')) return { name: 'shows' };
   return { name: 'home' };
@@ -1445,6 +1446,7 @@ function render() {
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'person') html = viewPerson(r.arg);
+  else if (r.name === 'search') html = viewSearch();
   else if (r.name === 'movies') html = viewList('movie');
   else if (r.name === 'shows') html = viewList('series');
   else html = viewHome();
@@ -1550,8 +1552,8 @@ function fitSearchGrid() {
   const count = Math.max(1, Math.round((available + gap) / (preferred + gap)));
   g.style.gridTemplateColumns = `repeat(${count}, ${(available - gap * (count - 1)) / count}px)`;
 }
-function renderSearch() {
-  const words = fold($('#q').value).split(/\s+/).filter(Boolean);
+function searchHtml(query) {
+  const words = fold(query || '').split(/\s+/).filter(Boolean);
   let list;
   if (!words.length) list = [...state.items].sort((a, b) => b.added - a.added);
   else {
@@ -1563,13 +1565,26 @@ function renderSearch() {
       return { it, score };
     }).filter(Boolean).sort((a, b) => b.score - a.score).map(x => x.it);
   }
-  $('#results').innerHTML = (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0;padding:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
+  return (words.length ? `<p class="empty" style="grid-column:1/-1;margin:0;padding:0">${list.length} result${list.length === 1 ? '' : 's'}</p>` : '') +
     (list.map(it => card(it, { caption: [yearOf(it), (it.meta?.genres || [])[0]].filter(Boolean).join(' · ') })).join('') || '<p class="empty">No results</p>');
+}
+function renderSearch() {
+  $('#results').innerHTML = searchHtml($('#q').value);
   fitSearchGrid(); requestAnimationFrame(fitSearchGrid);  // the scrollbar may appear after layout
+}
+// Touch screens search on an ordinary page (#/search), not in a full-screen layer: on iPhone, showing the layer froze the
+// screen for 2+ seconds (measured from a Mac through Web Inspector) however light its contents were, while ordinary pages are fast.
+const searchOnPage = () => !!window.matchMedia?.('(pointer: coarse)').matches;
+let searchQuery = '';
+function viewSearch() {
+  return `<div class="page search-page"><h1>Search</h1>
+    <div class="sfield"><input id="sq" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search the library" value="${esc(searchQuery)}"></div>
+    <div id="sresults" class="grid">${searchHtml(searchQuery)}</div></div>`;
 }
 // iPhone only opens the keyboard when focus happens inside the tap itself, so the field is focused synchronously.
 // The page behind is hidden and the hero paused while search is open: nothing underneath has to be painted or blurred.
 function openSearch() {
+  if (searchOnPage()) { if (routeInfo().name !== 'search') location.hash = '#/search'; return; }
   $('#search').hidden = false; document.documentElement.classList.add('search-open'); document.body.style.overflow = 'hidden';
   stopHero();
   try { $('#q').focus({ preventScroll: true }); } catch { $('#q').focus(); }
@@ -1580,6 +1595,7 @@ function closeSearch() {
   if (routeInfo().name === 'home') startHero();
 }
 $('#q').oninput = renderSearch;
+document.addEventListener('input', e => { if (e.target.id !== 'sq') return; searchQuery = e.target.value; const g = $('#sresults'); if (g) g.innerHTML = searchHtml(searchQuery); });
 $('#searchLink').onclick = e => { e.preventDefault(); openSearch(); };
 
 

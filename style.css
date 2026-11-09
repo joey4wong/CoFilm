@@ -415,6 +415,10 @@ body{overflow-x:clip}
 #player .pclose.lg,#trailer .pclose.lg{background:rgba(255,255,255,.1)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)}
 
 /* Movies toolbar: same pill look as the genre chips, in both themes. */
+/* Search page (touch screens): a plain field, no glass, no overlay. 16px+ text so iPhone does not zoom in. */
+.search-page .sfield{margin:0 var(--pad) 26px}
+.search-page .sfield input{width:100%;box-sizing:border-box;height:52px;border-radius:999px;border:1px solid var(--line,rgba(255,255,255,.14));background:rgba(128,128,136,.16);color:var(--text);font:inherit;font-size:17px;padding:0 22px;outline:none;-webkit-appearance:none;appearance:none}
+.search-page .sfield input:focus{border-color:rgba(255,255,255,.5)}
 .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 var(--pad) 28px}
 .toolbar .sel{position:relative;display:inline-flex;align-items:center}
 .toolbar .sel span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
