@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=99';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=100';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1316,7 +1316,10 @@ function render() {
   else if (r.name === 'shows') html = viewList('series');
   else html = viewHome();
   $('#view').innerHTML = html;
-  document.documentElement.classList.toggle('page-detail', r.name === 'detail');   // poster-coloured page
+  // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
+  const tinted = r.name === 'detail' || r.name === 'home', rootEl = document.documentElement;
+  rootEl.classList.toggle('film-tint', tinted);
+  if (tinted !== (rootEl.dataset.themeLock === 'dark')) { if (tinted) rootEl.dataset.themeLock = 'dark'; else delete rootEl.dataset.themeLock; window.cofilmRefreshTheme?.(); }
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });

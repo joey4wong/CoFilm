@@ -173,8 +173,12 @@ test('trailer wiring: Cmd/Ctrl-click keeps YouTube, Escape and navigation close 
   assert.match(source,/if \(e\.key !== 'Escape'\) return;\n  if \(closeTrailer\(\)\) return;/);assert.match(source,/function render\(\) \{\n  closeTrailer\(\);/);
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="trailer" class="trailer-modal" role="dialog" aria-modal="true"/);
 });
-test('detail pages fill with the film colours in both themes',()=>{
+test('home and film pages take the film colours like the reference: one blurred layer, long fade, no solid bottom',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
-  assert.match(css,/\.page-detail #ambient\{visibility:visible/);assert.match(css,/\.page-detail body\{background:transparent\}/);assert.match(css,/\[data-theme="light"\]\.page-detail #ambient\{/);
-  assert.match(source,/classList\.toggle\('page-detail', r\.name === 'detail'\)/);
+  assert.match(css,/\.film-tint body\{background:transparent\}/);
+  assert.match(css,/\.film-tint #ambient\{[^}]*filter:blur\(124px\) saturate\(\.96\)/);
+  assert.match(css,/\.film-tint :is\(\.detail \.bg,\.hero \.slide \.bg\)\{-webkit-mask-image:linear-gradient\(to bottom,#000 0,#000 44%,rgba\(0,0,0,\.72\) 68%,transparent 94%\)/);
+  assert.doesNotMatch(css,/page-detail/);
+  assert.match(source,/const tinted = r\.name === 'detail' \|\| r\.name === 'home'/);
+  const theme=fs.readFileSync(new URL('../theme.js',import.meta.url),'utf8');assert.match(theme,/root\.dataset\.themeLock \|\|/);assert.match(theme,/window\.cofilmRefreshTheme = refreshTheme/);
 });

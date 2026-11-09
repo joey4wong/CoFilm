@@ -422,20 +422,17 @@ body{overflow-x:clip}
 [data-theme="light"] .toolbar select:focus-visible,[data-theme="light"] .toolbar .chip-toggle:focus-visible{outline-color:#1b202b}
 @media (max-width:600px){.toolbar .sel{flex:1 1 calc(50% - 5px);min-width:0}.toolbar select{width:100%}.toolbar .sel:first-child{flex-basis:100%}}
 
-/* Detail pages take the film's own colours: its backdrop, blurred, fills the page from top to bottom
-   (instead of fading to black, or to white in the daytime theme). */
-/* The body's own solid colour used to paint over the layer; the root keeps the base colour beneath it. */
-.page-detail body{background:transparent}
-.page-detail #ambient{visibility:visible;filter:blur(80px) saturate(1.6) brightness(.66);opacity:1;transform:scale(1.25)}
-.page-detail #ambient::after{background:linear-gradient(180deg,rgba(8,8,10,.06),rgba(8,8,10,.3))}
-.page-detail .detail .bg{-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 80%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 80%,transparent 100%)}
-.page-detail .detail .bg::after{background:linear-gradient(90deg,rgba(10,10,10,.8),rgba(10,10,10,.3) 55%,rgba(10,10,10,.1))}
-/* Daytime: the same colours, but pale, so the theme stays light. The image still runs down to PLAY (mask set in JS). */
-/* On the coloured daytime page, secondary text is a little darker so it stays readable. */
-[data-theme="light"].page-detail{--dim:#2f3338;--muted:#2b2e32}
-[data-theme="light"].page-detail #ambient{filter:blur(80px) saturate(1.8) brightness(1.32);opacity:1}
-[data-theme="light"].page-detail #ambient::after{background:linear-gradient(180deg,rgba(236,237,233,.4),rgba(236,237,233,.58))}
-[data-theme="light"].page-detail .detail .bg{-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%));mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%))}
+/* Film colours (Home and film pages), modelled on watched.cx: the page colour IS the backdrop image, blurred
+   124px with natural saturation and a 30% darkening, so the sharp image above fades into the same colours with no line.
+   The body's own solid colour would paint over this layer, so it is transparent on these pages. */
+.film-tint body{background:transparent}
+.film-tint #ambient{visibility:visible;inset:0;opacity:.78;transform:scale(1.22);filter:blur(124px) saturate(.96) contrast(1.04) brightness(.7);transition:background-image .9s ease}
+.film-tint #ambient::after{background:linear-gradient(180deg,rgba(5,5,8,.04),rgba(5,5,8,.08) 56%,rgba(5,5,8,.2)),radial-gradient(at 0 34%,rgba(5,5,8,.34),transparent 52%)}
+/* Long, soft fade of the sharp image (solid to 44%, gone by 94%), and text shading without a solid bottom. */
+.film-tint :is(.detail .bg,.hero .slide .bg){-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%);mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%)}
+.film-tint .detail .bg::after{background:linear-gradient(180deg,rgba(5,5,8,.48),rgba(5,5,8,.16) 38%,rgba(5,5,8,.2) 72%,rgba(5,5,8,.44)),linear-gradient(90deg,rgba(5,5,8,.78),rgba(5,5,8,.3) 55%,rgba(5,5,8,.06))}
+.film-tint .slide::after{background:linear-gradient(180deg,rgba(5,5,8,.4),rgba(5,5,8,.1) 32%,rgba(5,5,8,.16) 70%,rgba(5,5,8,.34)),linear-gradient(90deg,rgba(5,5,8,.72) 0%,rgba(5,5,8,.3) 45%,transparent 70%);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%);mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%)}
+.film-tint .detail .bg{height:max(100vh,760px)}
 
 /* Trailer: a YouTube window over the page, closed with the same glass button as the player. */
 .trailer-modal{position:fixed;inset:0;z-index:65;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:trailer-in .25s ease}

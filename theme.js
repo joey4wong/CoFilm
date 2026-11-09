@@ -5,7 +5,8 @@
   let boundaryTimer;
   function refreshTheme() {
     const now = new Date(), hour = now.getHours();
-    const theme = darkPreference.matches || hour < 6 || hour >= 18 ? 'dark' : 'light';
+    // A page may pin the theme: Home and film pages always take the film's own (dark) colours.
+    const theme = root.dataset.themeLock || (darkPreference.matches || hour < 6 || hour >= 18 ? 'dark' : 'light');
     const changed = root.dataset.theme !== theme;
     root.dataset.theme = theme;
     root.style.colorScheme = theme;
@@ -24,5 +25,6 @@
   window.addEventListener('pageshow', refreshTheme);
   // Also recover from a clock/timezone change without requiring a page reload.
   setInterval(refreshTheme, 60000);
+  window.cofilmRefreshTheme = refreshTheme;
   refreshTheme();
 })();
