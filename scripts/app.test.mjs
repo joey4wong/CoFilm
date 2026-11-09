@@ -314,11 +314,14 @@ test('4K badges are soft champagne, not red, and never use backdrop-filter (nest
   assert.doesNotMatch(css,/#e0332f/);
   assert.match(css,/\.card \.q\{[^}]*color:#f1dfb6/);assert.match(css,/\.tag\{[^}]*color:#f1dfb6/);
   assert.doesNotMatch(css.match(/\.card \.q\{[^}]*\}/)[0],/backdrop-filter/);assert.doesNotMatch(css.match(/\.tag\{[^}]*\}/)[0],/backdrop-filter/);
-  assert.match(css,/\.search-open #ambient\{visibility:hidden!important\}/);
+  assert.match(css,/\.search-open :is\(#ambient,#view,#nav\)\{visibility:hidden!important\}/);assert.match(css,/\.search-open #search::before\{-webkit-backdrop-filter:none!important;backdrop-filter:none!important/);
 });
 
-test('opening and closing search toggles the search-open class on the page',()=>{
-  const cls=new Set();const ctx={$:s=>({hidden:true,value:''}),document:{documentElement:{classList:{add:c=>cls.add(c),remove:c=>cls.delete(c)}},body:{style:{}}},renderSearch(){},requestAnimationFrame(){},fitSearchGrid(){},applyGlass(){},setTimeout(){}};
+test('search: focus happens inside the tap (iPhone keyboard), hero pauses while open and resumes on Home',()=>{
+  const cls=new Set(),log=[];const q={hidden:true,value:'',focus:o=>log.push('focus')};const search={hidden:true};
+  const ctx={$:s=>s==='#q'?q:search,document:{documentElement:{classList:{add:c=>cls.add(c),remove:c=>cls.delete(c)}},body:{style:{}}},renderSearch:()=>log.push('render'),requestAnimationFrame(){},fitSearchGrid(){},applyGlass(){},stopHero:()=>log.push('stop'),startHero:()=>log.push('start'),routeInfo:()=>({name:'home'})};
   const {openSearch,closeSearch}=fnMany(['openSearch','closeSearch'],ctx);
-  openSearch();assert.equal(cls.has('search-open'),true);closeSearch();assert.equal(cls.has('search-open'),false);
+  openSearch();assert.equal(cls.has('search-open'),true);assert.deepEqual(log,['stop','focus','render']);
+  closeSearch();assert.equal(cls.has('search-open'),false);assert.equal(log.at(-1),'start');
+  assert.doesNotMatch(source,/setTimeout\(\(\) => \$\('#q'\)\.focus\(\), 50\)/);
 });
