@@ -259,3 +259,12 @@ test('decodeImage decodes each hero picture once and tolerates failures',async()
   await decodeImage('a');await decodeImage('a');assert.equal(made,1);await decodeImage('');assert.equal(made,1);
 });
 test('home warms the other hero pictures one by one',()=>{assert.match(source,/if \(r\.name === 'home'\) \{ startHero\(\); warmHero\(\);/);assert.match(source,/for \(let i = 0; i < hero\.list\.length; i\+\+\) await decodeImage\(slideImage\(i\)\)/);});
+
+test('phones held upright show the whole backdrop instead of a centre crop',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  const block=css.slice(css.indexOf('@media (max-width:820px) and (max-aspect-ratio:1/1){'));
+  assert.match(block,/\.film-tint \.slide \.bg,\.film-tint \.detail > \.bg\{[^}]*height:56\.25vw;background-size:100% auto/);
+  assert.doesNotMatch(block,/background-size:cover/);
+  assert.match(block,/\.film-tint \.hero\{height:calc\(56\.25vw \+ 400px\)/);
+  assert.match(block,/\.dtop\{min-height:0;justify-content:flex-start;padding-top:calc\(56\.25vw - 28px\)/);
+});
