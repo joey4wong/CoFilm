@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=98';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=99';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -545,6 +545,26 @@ function wakePlayerBar() {
     box.classList.add('idle');
   }, 3000);
 }
+// ---------- Trailer: plays in a window over the page instead of leaving for YouTube ----------
+let trailerReturnFocus = null;
+function openTrailer(key, name) {
+  if (!/^[\w-]{6,20}$/.test(key)) return false;
+  const box = $('#trailer');
+  // The page sends no referrer; YouTube embeds need one, so this frame asks for the site origin only.
+  box.querySelector('.trailer-frame').innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="${esc(name ? name + ' trailer' : 'Trailer')}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  trailerReturnFocus = document.activeElement;
+  box.hidden = false; document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => { applyGlass(); box.querySelector('.trailer-close').focus(); });
+  return true;
+}
+function closeTrailer() {
+  const box = $('#trailer');
+  if (box.hidden) return false;
+  box.querySelector('.trailer-frame').innerHTML = '';            // removing the frame stops the sound
+  box.hidden = true; document.body.style.overflow = '';
+  trailerReturnFocus?.focus?.(); trailerReturnFocus = null;
+  return true;
+}
 function closePlayer(fromHistory) {
   if (!fromHistory && history.state?.player) { history.back(); return; }   // popstate finishes the close
   savePosition();
@@ -925,7 +945,7 @@ function viewDetail(key) {
         ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
               : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
         ${resume && !isS ? `<button class="glass-action restart lg" data-play="${esc(f.id)}" data-restart aria-label="Start over" title="Start over">${I.restart}</button>` : ''}
-        ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="glass-action trailer lg" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener">${I.yt}TRAILER</a>` : ''; })()}
+        ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="glass-action trailer lg" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener" data-trailer="${esc(tr.key)}" data-trailer-title="${esc(title(it))}">${I.yt}TRAILER</a>` : ''; })()}
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
@@ -1276,6 +1296,7 @@ function routeInfo() {
 }
 let lastRoute = '';
 function render() {
+  closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
     let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
     if (genre) LS.set('view:movies', { ...movieView(), genre });
@@ -1295,6 +1316,7 @@ function render() {
   else if (r.name === 'shows') html = viewList('series');
   else html = viewHome();
   $('#view').innerHTML = html;
+  document.documentElement.classList.toggle('page-detail', r.name === 'detail');   // poster-coloured page
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -1432,6 +1454,11 @@ window.addEventListener('resize', () => {
 document.addEventListener('pointerdown', e => { if (e.target.closest?.('[data-play],[data-play-item]')) warmPlayer(); }, { passive: true });
 document.addEventListener('click', e => {
   const t = e.target;
+  const trailer = t.closest?.('[data-trailer]');
+  if (trailer && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {   // Cmd/Ctrl-click still opens YouTube
+    if (openTrailer(trailer.dataset.trailer, trailer.dataset.trailerTitle)) { e.preventDefault(); return; }
+  }
+  if (t.closest?.('[data-trailer-close]') || t.id === 'trailer') { e.preventDefault(); closeTrailer(); return; }
   if (t.closest('[data-hero-controls]')) {
     e.preventDefault(); e.stopPropagation();
     const slide = t.closest('[data-slide]');
@@ -1493,6 +1520,7 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
+  if (closeTrailer()) return;
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
   else if (!$('#search').hidden) closeSearch();
   else if (!$('#setup').hidden) $('#setup').hidden = true;

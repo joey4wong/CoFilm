@@ -126,7 +126,7 @@ test('player header never uses the frosted overlay layer and is the same in both
 
 test('the player close button uses the shared Liquid Glass lens, identical in both themes',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
-  assert.match(css,/#player \.pclose\.lg\{background:rgba\(255,255,255,\.1\)!important;box-shadow:/);   // out-ranks [data-theme="light"] .lg
+  assert.match(css,/#player \.pclose\.lg,#trailer \.pclose\.lg\{background:rgba\(255,255,255,\.1\)!important;box-shadow:/);   // out-ranks [data-theme="light"] .lg
   assert.doesNotMatch(css,/\.pclose[^{]*\{[^}]*backdrop-filter/);                                          // the lens comes from .lg, not a private blur
   assert.match(source,/wakePlayerBar\(\); requestAnimationFrame\(applyGlass\)/);
 });
@@ -155,4 +155,26 @@ test('player control groups use the corner glint rim, not a uniform white outlin
   assert.doesNotMatch(css,/inset 0 0 0 \.5px rgba\(255,255,255,\.18\),inset 0 1px 0 rgba\(255,255,255,\.3\),inset 0 -12px/);
   assert.match(css,/::after\{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px/);
   assert.match(css,/linear-gradient\(140deg,rgba\(255,255,255,\.7\) 0%/);   // identical to the site's .lg rim
+});
+
+test('trailer opens in a window with a safe YouTube embed, and closing removes it',()=>{
+  const frame={innerHTML:''},close={focus:()=>{}},box={hidden:true,querySelector:s=>s==='.trailer-frame'?frame:close};
+  const ret={focused:false,focus(){this.focused=true}};const body={style:{overflow:''}};
+  const ctx={$:()=>box,esc:s=>String(s).replace(/"/g,'&quot;'),document:{body,activeElement:ret},requestAnimationFrame:f=>f(),applyGlass:()=>{},trailerReturnFocus:null};
+  const {openTrailer,closeTrailer}=fnMany(['openTrailer','closeTrailer'],ctx);
+  assert.equal(openTrailer('P8xLgg-MNKw','Troy'),true);assert.equal(box.hidden,false);assert.equal(body.style.overflow,'hidden');
+  assert.match(frame.innerHTML,/youtube-nocookie\.com\/embed\/P8xLgg-MNKw\?autoplay=1/);assert.match(frame.innerHTML,/referrerpolicy="strict-origin-when-cross-origin"/);assert.match(frame.innerHTML,/allowfullscreen/);
+  assert.equal(closeTrailer(),true);assert.equal(frame.innerHTML,'');assert.equal(box.hidden,true);assert.equal(body.style.overflow,'');assert.equal(ret.focused,true);
+  assert.equal(closeTrailer(),false);
+  assert.equal(openTrailer('bad"key><script>',''),false);assert.equal(box.hidden,true);
+});
+test('trailer wiring: Cmd/Ctrl-click keeps YouTube, Escape and navigation close it',()=>{
+  assert.match(source,/data-trailer="\$\{esc\(tr\.key\)\}"/);assert.match(source,/!e\.metaKey && !e\.ctrlKey && !e\.shiftKey && !e\.altKey && e\.button === 0/);
+  assert.match(source,/if \(e\.key !== 'Escape'\) return;\n  if \(closeTrailer\(\)\) return;/);assert.match(source,/function render\(\) \{\n  closeTrailer\(\);/);
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="trailer" class="trailer-modal" role="dialog" aria-modal="true"/);
+});
+test('detail pages fill with the film colours in both themes',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/\.page-detail #ambient\{visibility:visible/);assert.match(css,/\.page-detail body\{background:transparent\}/);assert.match(css,/\[data-theme="light"\]\.page-detail #ambient\{/);
+  assert.match(source,/classList\.toggle\('page-detail', r\.name === 'detail'\)/);
 });

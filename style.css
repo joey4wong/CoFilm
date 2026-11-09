@@ -406,7 +406,7 @@ body{overflow-x:clip}
 .pclose svg{width:20px;height:20px;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
 .pclose:hover{transform:scale(1.08)}
 .pclose:focus-visible{outline:2px solid rgba(255,255,255,.9);outline-offset:3px}
-#player .pclose.lg{background:rgba(255,255,255,.1)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)}
+#player .pclose.lg,#trailer .pclose.lg{background:rgba(255,255,255,.1)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)}
 
 /* Movies toolbar: same pill look as the genre chips, in both themes. */
 .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 var(--pad) 28px}
@@ -421,3 +421,28 @@ body{overflow-x:clip}
 [data-theme="light"] .toolbar .chip-toggle.on{background:#1b202b;color:#fff}
 [data-theme="light"] .toolbar select:focus-visible,[data-theme="light"] .toolbar .chip-toggle:focus-visible{outline-color:#1b202b}
 @media (max-width:600px){.toolbar .sel{flex:1 1 calc(50% - 5px);min-width:0}.toolbar select{width:100%}.toolbar .sel:first-child{flex-basis:100%}}
+
+/* Detail pages take the film's own colours: its backdrop, blurred, fills the page from top to bottom
+   (instead of fading to black, or to white in the daytime theme). */
+/* The body's own solid colour used to paint over the layer; the root keeps the base colour beneath it. */
+.page-detail body{background:transparent}
+.page-detail #ambient{visibility:visible;filter:blur(80px) saturate(1.6) brightness(.66);opacity:1;transform:scale(1.25)}
+.page-detail #ambient::after{background:linear-gradient(180deg,rgba(8,8,10,.06),rgba(8,8,10,.3))}
+.page-detail .detail .bg{-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 80%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 80%,transparent 100%)}
+.page-detail .detail .bg::after{background:linear-gradient(90deg,rgba(10,10,10,.8),rgba(10,10,10,.3) 55%,rgba(10,10,10,.1))}
+/* Daytime: the same colours, but pale, so the theme stays light. The image still runs down to PLAY (mask set in JS). */
+/* On the coloured daytime page, secondary text is a little darker so it stays readable. */
+[data-theme="light"].page-detail{--dim:#2f3338;--muted:#2b2e32}
+[data-theme="light"].page-detail #ambient{filter:blur(80px) saturate(1.8) brightness(1.32);opacity:1}
+[data-theme="light"].page-detail #ambient::after{background:linear-gradient(180deg,rgba(236,237,233,.4),rgba(236,237,233,.58))}
+[data-theme="light"].page-detail .detail .bg{-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%));mask-image:linear-gradient(to bottom,#000 0,#000 var(--art-solid,72%),rgba(0,0,0,.78) var(--art-mid1,80%),rgba(0,0,0,.28) var(--art-mid2,93%),transparent var(--art-end,100%))}
+
+/* Trailer: a YouTube window over the page, closed with the same glass button as the player. */
+.trailer-modal{position:fixed;inset:0;z-index:65;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:trailer-in .25s ease}
+.trailer-modal[hidden]{display:none}
+.trailer-box{position:relative;width:min(1100px,100%,calc((100vh - 150px) * 16 / 9))}
+.trailer-frame{position:relative;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.trailer-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.trailer-close{position:absolute;right:0;bottom:calc(100% + 12px)}
+@keyframes trailer-in{from{opacity:0}to{opacity:1}}
+@media (max-width:600px){.trailer-modal{padding:12px}.trailer-frame{border-radius:12px}}
