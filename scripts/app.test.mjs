@@ -177,7 +177,7 @@ test('trailer wiring: Cmd/Ctrl-click keeps YouTube, Escape and navigation close 
 test('home and film pages take the film colours like the reference: one blurred layer, long fade, no solid bottom',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
   assert.match(css,/\.film-tint body\{background:transparent\}/);
-  assert.match(css,/\.film-tint #ambient\{[^}]*filter:blur\(124px\) saturate\(\.96\)/);
+  assert.match(css,/\.film-tint #ambient \.amb\{transform:translate\(-44%,-44%\) scale\(4\.88\);filter:blur\(31px\) saturate\(\.96\)/);
   assert.match(css,/\.film-tint :is\(\.detail \.bg,\.hero \.slide \.bg\)\{-webkit-mask-image:linear-gradient\(to bottom,#000 0,#000 44%,rgba\(0,0,0,\.72\) 68%,transparent 94%\)/);
   assert.doesNotMatch(css,/page-detail/);
   assert.match(source,/const tinted = r\.name === 'detail' \|\| r\.name === 'home'/);
@@ -216,3 +216,46 @@ test('person page: long bios collapse with Read more, bad ids and missing key ar
   assert.match(personPageFixture({failed:['5']}).view('5'),/Try again/);
   assert.match(personPageFixture().view('5'),/Loading/);
 });
+
+function ambientFixture() {
+  const mk=()=>({cls:new Set(),style:{},classList:{add(c){this.s.add(c)},remove(c){this.s.delete(c)},s:null}});
+  const layers=[mk(),mk()];layers.forEach(l=>{l.classList.s=l.cls});
+  const timers=[],decodes=[];
+  const ctx={$:()=>({querySelectorAll:()=>layers}),Image:function(){this.decode=()=>new Promise(r=>decodes.push(r))},setTimeout:(f)=>{timers.push(f)},ambientFront:0,ambientSrc:'',ambientToken:0};
+  const api=fnMany(['setAmbient'],Object.assign(ctx,{ambientSource:s=>s?String(s).replace(/\/t\/p\/(?:w\d+|original)\//,'/t/p/w300/'):''}));
+  return{layers,timers,decodes,setAmbient:api.setAmbient};
+}
+test('ambient layer: small image, decoded before it fades in, cross-fades by opacity, newest request wins',async()=>{
+  const f=ambientFixture();
+  f.setAmbient('https://image.tmdb.org/t/p/w1280/abc.jpg');assert.equal(f.layers[0].cls.size+f.layers[1].cls.size,0);   // nothing visible until decoded
+  f.decodes[0]();await Promise.resolve();await Promise.resolve();
+  assert.match(f.layers[1].style.backgroundImage,/\/t\/p\/w300\/abc\.jpg/);assert.ok(f.layers[1].cls.has('on'));
+  f.setAmbient('https://image.tmdb.org/t/p/w1280/def.jpg');f.setAmbient('https://image.tmdb.org/t/p/w1280/ghi.jpg');   // two quick changes
+  f.decodes[1]();f.decodes[2]();await Promise.resolve();await Promise.resolve();
+  assert.match(f.layers[0].style.backgroundImage,/ghi\.jpg/);assert.doesNotMatch(f.layers[0].style.backgroundImage,/def\.jpg/);   // the superseded image never shows
+  f.setAmbient('https://image.tmdb.org/t/p/w1280/ghi.jpg');assert.equal(f.decodes.length,3);                                    // same image: no work
+  f.setAmbient('');assert.equal(f.layers[0].cls.size+f.layers[1].cls.size,0);
+});
+test('ambient layer is built at a quarter size and fades by opacity only',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/#ambient \.amb\{[^}]*width:25%;height:25%[^}]*transition:opacity \.9s ease;will-change:opacity/);
+  assert.doesNotMatch(css,/#ambient\{[^}]*transition:background-image/);assert.doesNotMatch(css,/\.film-tint #ambient\{[^}]*filter/);
+  assert.match(fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),/<div id="ambient" aria-hidden="true"><div class="amb"><\/div><div class="amb"><\/div><\/div>/);
+});
+
+test('hero: the next picture is decoded before the slide changes; the newest request wins; slow decodes do not stall',async()=>{
+  const applied=[],decodes=new Map(),timers=[];
+  const ctx={hero:{list:[{},{},{}],idx:0},heroSwitch:0,decodedImages:new Map(),slideImage:i=>'img'+i,decodeImage:u=>new Promise(r=>decodes.set(u,r)),applySlide:i=>applied.push(i),setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length}};
+  const {showSlide}=fnMany(['showSlide'],ctx);
+  showSlide(1);assert.equal(ctx.hero.idx,1);assert.deepEqual(applied,[]);                 // not shown until decoded
+  const flush=()=>new Promise(r=>setImmediate(r));decodes.get('img1')();await flush();assert.deepEqual(applied,[1]);
+  showSlide(2);showSlide(0);decodes.get('img2')();decodes.get('img0')();await flush();assert.deepEqual(applied,[1,0]);   // slide 2 was superseded
+  showSlide(5);assert.equal(ctx.hero.idx,2);                                              // wraps around
+  assert.equal(timers.at(-1).ms,700);                                                      // never waits more than 0.7 s for a decode
+});
+test('decodeImage decodes each hero picture once and tolerates failures',async()=>{
+  let made=0;const ctx={decodedImages:new Map(),Image:function(){made++;this.decode=()=>Promise.reject(new Error('bad'))}};
+  const {decodeImage}=fnMany(['decodeImage'],ctx);
+  await decodeImage('a');await decodeImage('a');assert.equal(made,1);await decodeImage('');assert.equal(made,1);
+});
+test('home warms the other hero pictures one by one',()=>{assert.match(source,/if \(r\.name === 'home'\) \{ startHero\(\); warmHero\(\);/);assert.match(source,/for \(let i = 0; i < hero\.list\.length; i\+\+\) await decodeImage\(slideImage\(i\)\)/);});

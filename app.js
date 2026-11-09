@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=101';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=103';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -659,7 +659,28 @@ function row(name, list, opts = {}) {
   return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-prev lg" data-row-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
 
 }
-const setAmbient = url => { $('#ambient').style.backgroundImage = url ? `url("${url}")` : 'none'; };
+// Page colour layer. A small TMDB image is plenty once it is blurred; the new image is decoded BEFORE the fade starts,
+// then the two layers cross-fade by opacity only (no per-frame re-blur, no decode during the animation).
+let ambientFront = 0, ambientSrc = '', ambientToken = 0;
+const ambientSource = url => url ? String(url).replace(/\/t\/p\/(?:w\d+|original)\//, '/t/p/w300/') : '';
+function setAmbient(url) {
+  const src = ambientSource(url);
+  if (src === ambientSrc) return;
+  ambientSrc = src;
+  const layers = $('#ambient').querySelectorAll('.amb'), token = ++ambientToken;
+  if (!src) { layers.forEach(l => l.classList.remove('on')); return; }
+  const next = layers[1 - ambientFront], prev = layers[ambientFront];
+  const show = () => {
+    if (token !== ambientToken) return;                           // a newer image was requested meanwhile
+    next.style.backgroundImage = `url("${src}")`;
+    next.style.zIndex = '1'; prev.style.zIndex = '0';
+    next.classList.add('on');
+    ambientFront = 1 - ambientFront;
+    setTimeout(() => { if (token === ambientToken) prev.classList.remove('on'); }, 1000);
+  };
+  const img = new Image(); img.src = src;
+  (img.decode ? img.decode() : Promise.resolve()).then(show, show);
+}
 
 // ---------- views ----------
 const hero = { idx: 0, timer: 0, list: [] };
@@ -1365,7 +1386,7 @@ function render() {
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  if (r.name === 'home') { startHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
+  if (r.name === 'home') { startHero(); warmHero(); if (hero.list[hero.idx]) setAmbient(bgOf(hero.list[hero.idx])); } else stopHero();
   // Coming back from a person page returns to where you were on the film page.
   const cameFromPerson = !keepScroll && lastRoute.startsWith('#/person/') && savedScroll.has(sig);
   if (!keepScroll && lastRoute) savedScroll.set(lastRoute, y);
@@ -1375,19 +1396,40 @@ function render() {
   if (r.name === 'detail') setTimeout(() => { if (routeInfo().name === 'detail') warmPlayer(); }, 1200);
   requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); settleLightArtwork(); updateNavContrast(); });
 }
+// Hero pictures are large. Decode each one BEFORE its cross-fade starts, so the animation never waits on a decode
+// (that wait showed up as roughly a second of 10-20 fps every time the slide changed).
+const decodedImages = new Map();
+function decodeImage(url) {
+  if (!url) return Promise.resolve();
+  if (!decodedImages.has(url)) { const img = new Image(); img.src = url; decodedImages.set(url, (img.decode ? img.decode() : Promise.resolve()).catch(() => {})); }
+  return decodedImages.get(url);
+}
+const slideImage = i => (document.querySelector(`.slide[data-i="${i}"] .bg`)?.style.backgroundImage.match(/url\(["']?([^"')]+)/) || [])[1] || '';
+let heroSwitch = 0, heroWarmKey = '';
 function showSlide(i) {
   if (!hero.list.length) return;
   hero.idx = (i + hero.list.length) % hero.list.length;
+  const idx = hero.idx, token = ++heroSwitch;
+  Promise.race([decodeImage(slideImage(idx)), new Promise(r => setTimeout(r, 700))]).then(() => { if (token === heroSwitch) applySlide(idx); });
+}
+function applySlide(idx) {
   document.querySelectorAll('.slide').forEach(s => {
-    const active = +s.dataset.i === hero.idx;
+    const active = +s.dataset.i === idx;
     s.classList.toggle('on', active); s.inert = !active; s.setAttribute('aria-hidden', String(!active));
   });
   requestAnimationFrame(() => { layoutLightArtwork(); updateNavContrast(); });
   document.querySelectorAll('.dots [data-slide]').forEach(d => {
-    const active = +d.dataset.slide === hero.idx;
+    const active = +d.dataset.slide === idx;
     d.classList.toggle('on', active); d.setAttribute('aria-current', String(active));
   });
-  setAmbient(bgOf(hero.list[hero.idx]));
+  setAmbient(bgOf(hero.list[idx]));
+}
+// Quietly decode the other slides shortly after the home page appears, one at a time.
+function warmHero() {
+  const key = hero.list.map(it => it.key).join('|');
+  if (!key || key === heroWarmKey) return;
+  heroWarmKey = key;
+  setTimeout(async () => { for (let i = 0; i < hero.list.length; i++) await decodeImage(slideImage(i)); }, 1500);
 }
 function startHero() { stopHero(); if (hero.list.length > 1) hero.timer = setInterval(() => showSlide(hero.idx + 1), 8000); }
 function stopHero() { clearInterval(hero.timer); }

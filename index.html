@@ -11,24 +11,24 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="CoFilm">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<script src="theme.js?v=101"></script>
+<script src="theme.js?v=103"></script>
 <title>CoFilm</title>
-<link rel="icon" href="favicon.ico?v=101" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=101">
-<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=101">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=101">
+<link rel="icon" href="favicon.ico?v=103" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=103">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png?v=103">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=103">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=101">
+<link rel="stylesheet" href="style.css?v=103">
 <link rel="preconnect" href="https://image.tmdb.org">
-<link rel="modulepreload" href="lib/catalog.mjs?v=101">
+<link rel="modulepreload" href="lib/catalog.mjs?v=103">
 <link rel="preconnect" href="https://api-badgerp.svc.ms" crossorigin>
 <link rel="preconnect" href="https://my.microsoftpersonalcontent.com" crossorigin>
 <link rel="preconnect" href="https://api.themoviedb.org" crossorigin>
 </head>
 <body>
-<div id="ambient"></div>
+<div id="ambient" aria-hidden="true"><div class="amb"></div><div class="amb"></div></div>
 <script>if (navigator.userAgentData && navigator.userAgentData.brands.some(b => /Chromium/.test(b.brand))) document.documentElement.classList.add('chromium');</script>
 <nav id="nav" class="lg" aria-label="Main">
   <a href="#/" data-route="home">Home</a>
@@ -76,6 +76,6 @@
     </details>
   </div>
 </div>
-<script type="module" src="app.js?v=101"></script>
+<script type="module" src="app.js?v=103"></script>
 </body>
 </html>

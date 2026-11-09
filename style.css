@@ -4,7 +4,12 @@ html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 "DM Sans
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-#ambient{position:fixed;inset:0;z-index:-1;background-size:cover;background-position:center;filter:blur(90px) saturate(1.4) brightness(.45);transform:scale(1.2);opacity:.9;transition:background-image .8s ease}
+/* Ambient colour layer. Cheap by construction: two layers cross-fade by OPACITY only; each is built at a quarter of the
+   screen size (so the blur is computed on 1/16 of the pixels) and scaled back up, which looks identical once blurred. */
+#ambient{position:fixed;inset:0;z-index:-1;overflow:hidden;contain:strict;pointer-events:none}
+#ambient .amb{position:absolute;left:0;top:0;width:25%;height:25%;transform-origin:0 0;transform:translate(-40%,-40%) scale(4.8);background-size:cover;background-position:center;
+  filter:blur(22px) saturate(1.4) brightness(.45);opacity:0;transition:opacity .9s ease;will-change:opacity;backface-visibility:hidden}
+#ambient .amb.on{opacity:.9}
 #ambient::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(10,10,10,.55) 55%,var(--bg) 100%)}
 /* nav */
 #nav{position:fixed;top:26px;left:50%;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:4px;padding:6px;border-radius:999px;background:var(--glass);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);border:1px solid rgba(255,255,255,.08);box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -426,7 +431,9 @@ body{overflow-x:clip}
    124px with natural saturation and a 30% darkening, so the sharp image above fades into the same colours with no line.
    The body's own solid colour would paint over this layer, so it is transparent on these pages. */
 .film-tint body{background:transparent}
-.film-tint #ambient{visibility:visible;inset:0;opacity:.78;transform:scale(1.22);filter:blur(124px) saturate(.96) contrast(1.04) brightness(.7);transition:background-image .9s ease}
+.film-tint #ambient{visibility:visible}
+.film-tint #ambient .amb{transform:translate(-44%,-44%) scale(4.88);filter:blur(31px) saturate(.96) contrast(1.04) brightness(.7)}   /* = 124px blur at full size */
+.film-tint #ambient .amb.on{opacity:.78}
 .film-tint #ambient::after{background:linear-gradient(180deg,rgba(5,5,8,.04),rgba(5,5,8,.08) 56%,rgba(5,5,8,.2)),radial-gradient(at 0 34%,rgba(5,5,8,.34),transparent 52%)}
 /* Long, soft fade of the sharp image (solid to 44%, gone by 94%), and text shading without a solid bottom. */
 .film-tint :is(.detail .bg,.hero .slide .bg){-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%);mask-image:linear-gradient(to bottom,#000 0,#000 44%,rgba(0,0,0,.72) 68%,transparent 94%)}
