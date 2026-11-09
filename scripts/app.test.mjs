@@ -308,3 +308,9 @@ test('iPhone fullscreen keeps the film upright and inside the visible screen',()
   assert.match(source,/keepFullscreenUpright\(player\);/);
   assert.match(source,/:host\(\.movi-pseudo-fullscreen\)\{height:100vh!important;height:100dvh!important;[^}]*transform:none!important/);
 });
+
+test('4K badges use the soft champagne style, not red',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.doesNotMatch(css,/#e0332f/);
+  assert.match(css,/\.card \.q\{[^}]*color:#f1dfb6/);assert.match(css,/\.tag\{[^}]*color:#f1dfb6/);
+});
