@@ -301,3 +301,10 @@ test('a select is never focused from code on touch screens (iPhone opens its pic
   mk(sel,true)('x');assert.equal(focused,0);mk(sel,false)('x');assert.equal(focused,1);mk(btn,true)('x');assert.equal(focused,11);
   assert.match(source,/LS\.del\('view:movies'\); render\(\); keepFocus\('\[data-movie-view="sort"\]'\)/);
 });
+
+test('iPhone fullscreen keeps the film upright and inside the visible screen',()=>{
+  const cls=new Set(['movi-pseudo-fs-rotate']);const el={classList:{remove:c=>cls.delete(c)}};
+  const {keepFullscreenUpright}=fnMany(['keepFullscreenUpright'],{});keepFullscreenUpright(el);el.updatePseudoFsRotation();assert.equal(cls.has('movi-pseudo-fs-rotate'),false);
+  assert.match(source,/keepFullscreenUpright\(player\);/);
+  assert.match(source,/:host\(\.movi-pseudo-fullscreen\)\{height:100vh!important;height:100dvh!important;[^}]*transform:none!important/);
+});

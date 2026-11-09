@@ -1,4 +1,4 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=110';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=111';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -435,6 +435,12 @@ function nextEpisode(it, f) {
   const i = it.files.indexOf(f);
   return i >= 0 ? it.files[i + 1] || null : null;
 }
+// iPhone Safari can only put a <video> into its own fullscreen player; movi paints to a canvas (that is how it plays
+// MKV/HEVC), so on iPhone it fills the screen with CSS instead and turns a landscape film 90° on its side.
+// Keep the picture upright and letterboxed, like iOS's own player; turning the phone gives a full landscape picture.
+function keepFullscreenUpright(el) {
+  el.updatePseudoFsRotation = function () { this.classList.remove('movi-pseudo-fs-rotate'); };
+}
 async function play(fileId, restart) {
   let it, f;
   for (const x of state.items) for (const y of x.files) if (y.id === fileId) { it = x; f = y; }
@@ -458,6 +464,7 @@ async function play(fileId, restart) {
   player.setAttribute('controls', ''); player.setAttribute('crossorigin', 'anonymous');
   player.setAttribute('fallback', 'native'); player.setAttribute('persist', 'volume speed subtitlelang audiolang');
   player.setAttribute('title', $('#ptitle').textContent);         // lock screen / Now Playing name
+  keepFullscreenUpright(player);
   if (it.meta?.background) player.setAttribute('poster', it.meta.background);
   if (startAt) player.setAttribute('startat', startAt.toFixed(2)); // open at the saved spot, not at 0 then seek
   for (const x of await subs) {
@@ -1147,6 +1154,9 @@ const PLAYER_GLASS_CSS = `
 :is(${PLAYER_GLASS_PANELS}){background:rgba(16,16,20,.4)!important;border:0!important;
   -webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6);
   box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 20px 50px rgba(0,0,0,.45)!important}
+
+/* iPhone fullscreen (CSS fill): the visible screen, upright, so Safari's toolbars never cover the controls. */
+:host(.movi-pseudo-fullscreen){height:100vh!important;height:100dvh!important;width:100vw!important;transform:none!important;top:0!important;left:0!important}
 `;
 const playerGlassValue = new WeakMap();
 let playerGlassMO = null, playerGlassRO = null, playerGlassFrame = 0;
