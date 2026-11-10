@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=127';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=127';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=128';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=128';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -253,7 +253,7 @@ async function applyFiles(files, { refreshMetadata = true } = {}) {
   const old = new Map(state.items.map(it => [it.key, it.meta]));
   const before = state.items.length;
   state.listedAt = LS.get('od:listedAt');
-  state.items = buildItems(files);
+  state.items = buildItems(files).filter(it => it.parsed.kind !== 'series');   // TV episodes in OneDrive are ignored
   const pending = [];
   for (const it of state.items) {
     const { entry, fresh } = cachedMetadata(it.parsed);
@@ -1561,8 +1561,8 @@ function render() {
   // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
   const tinted = r.name === 'detail' || r.name === 'home' || r.name === 'person', rootEl = document.documentElement;
   rootEl.classList.toggle('film-tint', tinted);
-  const darkLock = tinted || r.name === 'movies';   // the Movies wall is always the textured black look too
-  rootEl.classList.toggle('movies-dark', r.name === 'movies');
+  const darkLock = tinted || r.name === 'movies' || r.name === 'search';   // the Movies wall is always the textured black look too
+  rootEl.classList.toggle('movies-dark', r.name === 'movies' || r.name === 'search');
   if (darkLock !== (rootEl.dataset.themeLock === 'dark')) { if (darkLock) rootEl.dataset.themeLock = 'dark'; else delete rootEl.dataset.themeLock; window.cofilmRefreshTheme?.(); }
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
