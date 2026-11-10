@@ -1203,9 +1203,7 @@ function applyGlass() {
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
-    // The SVG lens cannot read content inside a nested scroll container, so search keeps the plain glass layer.
-    if (el.closest('#search')) { el.style.removeProperty('backdrop-filter'); return; }
-    const id = lensFor(el, el.id === 'nav' && desktopNav.matches); if (!id) return;
+    const id = lensFor(el, desktopNav.matches && (el.id === 'nav' || el.matches('#search .searchfield'))); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
