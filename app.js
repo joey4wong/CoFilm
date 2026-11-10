@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=134';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=134';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=135';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=135';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -905,16 +905,10 @@ function viewList(kind) {
     <div class="movies-stage">${flow ? flowBlock : galaxyBlock}</div>
     ${movieDock(viewResolved, genres, decades, countries, { flow, page: slice.page, pages: slice.pages, total: slice.total })}</div>`;
 }
-// Phone search page: the pill nav hides while the field is focused or holds text; it comes back when the field is empty and idle.
-function syncSearchNav() {
-  const q = document.getElementById('sq'), root = document.documentElement;
-  root.classList.toggle('search-typing', !!q && routeInfo().name === 'search' && !(q.value === '' && document.activeElement !== q && !root.classList.contains('search-fresh')));
-}
-// The pill nav is hidden as soon as the Search page opens; it returns once the field is emptied or left empty.
-document.addEventListener('focusin', e => { if (e.target.id === 'sq') { document.documentElement.classList.remove('search-fresh'); document.documentElement.classList.add('search-typing'); } });
-document.addEventListener('focusout', e => { if (e.target.id === 'sq' && !e.target.value) { document.documentElement.classList.remove('search-fresh', 'search-typing'); } });
-document.addEventListener('input', e => { if (e.target.id === 'sq') document.documentElement.classList.toggle('search-typing', !!e.target.value); });
-window.addEventListener('hashchange', () => { const on = routeInfo().name === 'search'; document.documentElement.classList.toggle('search-typing', on); document.documentElement.classList.toggle('search-fresh', on); });
+// Phone search page behaves like the desktop overlay: the pill nav is gone while it is open, and the X leaves it.
+const syncSearchNav = () => document.documentElement.classList.toggle('search-typing', routeInfo().name === 'search');
+window.addEventListener('hashchange', () => setTimeout(syncSearchNav, 0));
+document.addEventListener('click', e => { if (e.target.closest?.('[data-search-back]')) { searchQuery = ''; if (history.length > 1) history.back(); else location.hash = '#/'; } });
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
 const creditsPending = new Set();
@@ -1301,7 +1295,7 @@ function applyGlass() {
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
     if (el.matches('[data-movie-ind]')) { applyGlassInd(); return; }
-    const id = lensFor(el, el.id === 'nav' || el.matches('#search .searchfield')); if (!id) return;
+    const id = lensFor(el, el.id === 'nav' || el.matches('#search .searchfield, .search-page .searchfield')); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
@@ -1567,6 +1561,7 @@ function render() {
   else if (r.name === 'shows') html = viewList('series');
   else html = viewHome();
   $('#view').innerHTML = html;
+  syncSearchNav();
   // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
   const tinted = r.name === 'detail' || r.name === 'home' || r.name === 'person', rootEl = document.documentElement;
   rootEl.classList.toggle('film-tint', tinted);
@@ -1711,7 +1706,8 @@ const searchOnPage = () => !!window.matchMedia?.('(pointer: coarse)').matches;
 let searchQuery = '';
 function viewSearch() {
   return `<div class="page search-page"><h1>Search</h1>
-    <div class="sfield"><input id="sq" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search the library" value="${esc(searchQuery)}"></div>
+    <div class="searchbox"><div class="searchfield lg"><input id="sq" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search the library" value="${esc(searchQuery)}"></div>
+    <button class="icon lg" data-search-back aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     <div id="sresults" class="grid">${searchHtml(searchQuery)}</div></div>`;
 }
 // iPhone only opens the keyboard when focus happens inside the tap itself, so the field is focused synchronously.

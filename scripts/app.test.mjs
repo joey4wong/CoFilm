@@ -334,7 +334,7 @@ test('search page: route, field settings for iPhone, and live results without th
   assert.match(source,/type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"/);
   assert.match(source,/document\.addEventListener\('input', e => \{ if \(e\.target\.id !== 'sq'\) return;/);
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
-  assert.match(css,/\.search-page \.sfield input\{[^}]*font-size:17px/);assert.doesNotMatch(css.match(/\.search-page \.sfield input\{[^}]*\}/)[0],/backdrop-filter/);
+  assert.match(css,/\.searchbox \.searchfield input\{[^}]*font-size:18px/);   // 16px or more: iPhone does not zoom in
 });
 test('searchHtml: all films newest first when empty, filtered and counted when typing',()=>{
   const items=[{key:'a',added:1},{key:'b',added:2}];
