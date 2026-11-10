@@ -414,7 +414,40 @@ body{overflow-x:clip}
 .pclose:focus-visible{outline:2px solid rgba(255,255,255,.9);outline-offset:3px}
 #player .pclose.lg,#trailer .pclose.lg{background:rgba(255,255,255,.1)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)}
 
-/* Movies toolbar: same pill look as the genre chips, in both themes. */
+/* Movies: galaxy ring (default) or poster grid after filters / sort; controls sit in a bottom liquid-glass dock. */
+.movies-page{padding-bottom:200px}
+.movies-page--galaxy h1{text-align:center;margin-bottom:8px}
+.movies-stage{min-height:min(68vh,720px);display:flex;align-items:center;justify-content:center;margin:0 auto;padding:0 var(--pad)}
+.movies-galaxy{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
+.movies-flow{width:100%}
+.movies-flow .grid{padding-top:8px}
+.galaxy-viewport{width:min(1100px,100%);height:min(62vh,560px);min-height:400px;perspective:1100px;perspective-origin:50% 50%;display:flex;align-items:center;justify-content:center;overflow:visible;cursor:grab;touch-action:none;position:relative}
+.galaxy-viewport:active{cursor:grabbing}
+.galaxy-ring{position:relative;width:0;height:0;transform-style:preserve-3d;will-change:transform}
+.g-card{position:absolute;width:92px;height:138px;left:-46px;top:-69px;opacity:0;border-radius:10px;transform-style:preserve-3d;backface-visibility:visible;background:rgba(12,12,16,.55);border:1px solid rgba(255,255,255,.14);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);overflow:hidden;will-change:transform,opacity;cursor:pointer}
+.g-card-poster{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;user-select:none}
+.g-card-fallback{display:flex;align-items:center;justify-content:center;height:100%;padding:6px;font-size:10px;font-weight:600;text-align:center;color:rgba(255,255,255,.75);line-height:1.2}
+.g-dust{position:absolute;left:0;top:0;width:4px;height:4px;border-radius:999px;background:rgba(255,255,255,.55);box-shadow:0 0 10px rgba(255,255,255,.35);pointer-events:none;transform-style:preserve-3d;will-change:transform,opacity}
+.movie-dock{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;width:min(920px,calc(100vw - 28px));padding:12px 14px 14px;border-radius:28px;display:flex;flex-direction:column;gap:10px}
+.movie-dock-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+.movie-dock-hint{flex:1 1 100%;text-align:center;font-size:13px;color:var(--muted);padding:0 8px 2px}
+.movie-dock-chip{padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font:inherit;font-size:13px;color:rgba(255,255,255,.88);cursor:pointer;white-space:nowrap}
+.movie-dock-chip:hover{background:rgba(255,255,255,.14)}
+.movie-dock-chip.on,.movie-dock-chip-toggle.on{background:rgba(255,255,255,.92);color:#111;border-color:rgba(255,255,255,.5)}
+.movie-dock-reset{background:rgba(255,120,100,.18);border-color:rgba(255,140,120,.35)}
+.movie-dock-pages{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:2px}
+.movie-dock-page{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.movie-dock-page:disabled{opacity:.35;cursor:default}
+.movie-dock-page-label{font-size:13px;color:var(--muted);min-width:7em;text-align:center}
+.movie-dock-sheet{margin-top:2px;padding:10px 6px 4px;border-top:1px solid rgba(255,255,255,.08)}
+.movie-dock-panel-title{margin:0 0 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+.movie-dock-options{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-height:min(34vh,260px);overflow:auto;padding:0 4px 6px}
+.movie-dock-opt{padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font:inherit;font-size:13px;color:rgba(255,255,255,.85);cursor:pointer}
+.movie-dock-opt.on{background:#fff;color:#111;border-color:rgba(255,255,255,.45)}
+.movie-dock-chip:focus-visible,.movie-dock-opt:focus-visible,.movie-dock-page:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
+[data-theme="light"] .movie-dock-chip,[data-theme="light"] .movie-dock-opt,[data-theme="light"] .movie-dock-page{background:var(--surface);border-color:rgba(23,27,36,.12);color:var(--text)}
+[data-theme="light"] .movie-dock-chip.on,[data-theme="light"] .movie-dock-chip-toggle.on,[data-theme="light"] .movie-dock-opt.on{background:#1b202b;color:#fff}
+/* Legacy toolbar (shows elsewhere if reused) */
 /* Search page (touch screens): a plain field, no glass, no overlay. 16px+ text so iPhone does not zoom in. */
 .search-page .sfield{margin:0 var(--pad) 26px}
 .search-page .sfield input{width:100%;box-sizing:border-box;height:52px;border-radius:999px;border:1px solid var(--line,rgba(255,255,255,.14));background:rgba(128,128,136,.16);color:var(--text);font:inherit;font-size:17px;padding:0 22px;outline:none;-webkit-appearance:none;appearance:none}

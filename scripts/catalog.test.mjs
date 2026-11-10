@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseName, keyOf, isFreshMeta, tscore, sortMovieFacts, filterMovieFacts, decadeOf, titleSortKey, titlesWithPerson, personKey, compactPerson, libraryMatches, formatDay, lifeLine } from '../lib/catalog.mjs';
+import { parseName, keyOf, isFreshMeta, tscore, sortMovieFacts, filterMovieFacts, decadeOf, titleSortKey, titlesWithPerson, personKey, compactPerson, libraryMatches, formatDay, lifeLine, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from '../lib/catalog.mjs';
 
 test('movie filename keeps its stable progress/cache key', () => {
   const p = parseName('Konigin.der.Nacht.2017.1080p.AMZN.WEB-DL.DDP2.0.H.264.mkv');
@@ -45,6 +45,25 @@ test('library titles are matched by TMDB id and type, never by name',()=>{
   const items=[{key:'a',type:'movie',tmdbId:10},{key:'b',type:'movie',tmdbId:20},{key:'c',type:'tv',tmdbId:20},{key:'d',type:'movie',tmdbId:30},{key:'e',type:'movie',tmdbId:99},{key:'f',type:'movie',tmdbId:null},{key:'g',type:'movie',tmdbId:'40'}];
   assert.deepEqual(libraryMatches(items,person),[{key:'a',role:'Hero'},{key:'c',role:'Guest'},{key:'d',role:'Director'},{key:'g',role:'Producer'}]);   // movie 20 is not tv 20; Director wins over other jobs
   assert.deepEqual(libraryMatches(items,{cast:[],crew:[]}),[]);
+});
+test('moviesFlowActive is false only with default sort and no filters',()=>{
+  assert.equal(moviesFlowActive({}),false);
+  assert.equal(moviesFlowActive({ sort:'added', genre:'', decade:'', country:'', only4k:false }),false);
+  assert.equal(moviesFlowActive({ sort:'rating' }),true);
+  assert.equal(moviesFlowActive({ country:'France' }),true);
+  assert.equal(moviesFlowActive({ only4k:true }),true);
+});
+test('moviePageSlice paginates without mutating the list',()=>{
+  const list=Array.from({length:100},(_,i)=>i);
+  const a=moviePageSlice(list,1,48);const b=moviePageSlice(list,3,48);
+  assert.equal(a.items.length,48);assert.equal(a.pages,3);assert.equal(a.page,1);
+  assert.equal(b.items[0],96);assert.equal(b.page,3);
+  assert.equal(list.length,100);
+});
+test('pickGalaxyMovies is stable for a seed',()=>{
+  const pool=[{k:1},{k:2},{k:3},{k:4},{k:5}];
+  assert.deepEqual(pickGalaxyMovies(pool,42,3).map(x=>x.k),pickGalaxyMovies(pool,42,3).map(x=>x.k));
+  assert.notDeepEqual(pickGalaxyMovies(pool,42,3).map(x=>x.k),pickGalaxyMovies(pool,99,3).map(x=>x.k));
 });
 test('life dates read naturally and empty parts are skipped',()=>{
   assert.equal(formatDay('1974-01-12'),'January 12, 1974');assert.equal(formatDay(''),'');assert.equal(formatDay('1974'),'');
