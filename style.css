@@ -423,7 +423,7 @@ body{overflow-x:clip}
 .galaxy-viewport{width:min(1100px,100%);height:min(62vh,560px);min-height:400px;perspective:1100px;perspective-origin:50% 50%;display:flex;align-items:center;justify-content:center;overflow:visible;cursor:grab;touch-action:none;position:relative}
 .galaxy-viewport:active{cursor:grabbing}
 .galaxy-ring{position:relative;width:0;height:0;transform-style:preserve-3d;will-change:transform}
-.g-card{position:absolute;width:92px;height:138px;left:-46px;top:-69px;opacity:0;border-radius:10px;transform-style:preserve-3d;backface-visibility:visible;background:rgba(12,12,16,.55);border:1px solid rgba(255,255,255,.14);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);overflow:hidden;will-change:transform,opacity;cursor:pointer}
+.g-card{position:absolute;width:104px;height:156px;left:-52px;top:-78px;opacity:0;border-radius:10px;transform-style:preserve-3d;backface-visibility:visible;background:rgba(12,12,16,.55);border:1px solid rgba(255,255,255,.14);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);overflow:hidden;will-change:transform,opacity;cursor:pointer}
 .g-card-poster{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;user-select:none}
 .g-card-fallback{display:flex;align-items:center;justify-content:center;height:100%;padding:6px;font-size:10px;font-weight:600;text-align:center;color:rgba(255,255,255,.75);line-height:1.2}
 .g-dust{position:absolute;left:0;top:0;width:4px;height:4px;border-radius:999px;background:rgba(255,255,255,.55);box-shadow:0 0 10px rgba(255,255,255,.35);pointer-events:none;transform-style:preserve-3d;will-change:transform,opacity}
