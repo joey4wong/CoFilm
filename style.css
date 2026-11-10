@@ -583,3 +583,9 @@ html.movies-dark .movie-ind.lg{background:rgba(255,255,255,.14)!important}
 .search-page{padding-top:150px}
 .search-page .sfield{position:fixed;top:66px;left:0;right:0;z-index:30;margin:0;padding:10px var(--pad) 22px;background:linear-gradient(180deg,#0b0b0d 62%,rgba(11,11,13,0))}
 [data-theme="light"] .search-page .sfield{background:linear-gradient(180deg,#f4f4f6 62%,rgba(244,244,246,0))}
+/* Phone search: no band behind the field; the field itself is Liquid Glass (blur + saturation + bright rim). */
+.search-page .sfield,[data-theme="light"] .search-page .sfield{background:none!important;padding:10px var(--pad) 12px;pointer-events:none}
+.search-page .sfield input{pointer-events:auto;background:rgba(255,255,255,.07)!important;border:0!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.8) brightness(1.08);backdrop-filter:blur(16px) saturate(1.8) brightness(1.08);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.28),inset 0 1px 1px rgba(255,255,255,.45),inset 0 -10px 18px -12px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3)}
+.search-page .sfield input:focus{box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 1px 1px rgba(255,255,255,.5),inset 0 -10px 18px -12px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3)}
