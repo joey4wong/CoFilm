@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=116';
-import { initMovieGalaxy } from './lib/galaxy.mjs?v=116';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=119';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=119';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -794,52 +794,46 @@ function setMovieView(patch, focus) {
   render();
   keepFocus(focus);
 }
-function dockLabel(options, value, fallback) {
-  return options.find(([v]) => String(v) === String(value))?.[1] || fallback;
+// One liquid-glass "Filters" button opens one glass sheet holding every choice. The open state survives page redraws
+// (picking a filter redraws the page), so the sheet stays open while you choose.
+let movieMenuOpen = false;
+function movieChoice(name, label, options, value) {
+  return `<div class="movie-menu-group"><p class="movie-menu-title">${esc(label)}</p>
+    <div class="movie-menu-options" role="listbox" aria-label="${esc(label)}">
+      ${options.map(([v, t]) => `<button type="button" class="movie-menu-opt${String(v) === String(value) ? ' on' : ''}" role="option" aria-selected="${String(v) === String(value)}" data-movie-pick="${esc(name)}" data-movie-value="${esc(v)}">${esc(t)}</button>`).join('')}
+    </div></div>`;
 }
-function movieDockPanel(name, label, options, value) {
-  return `<div class="movie-dock-panel" data-movie-panel-body="${name}" hidden>
-    <p class="movie-dock-panel-title">${esc(label)}</p>
-    <div class="movie-dock-options" role="listbox" aria-label="${esc(label)}">
-      ${options.map(([v, t]) => `<button type="button" class="movie-dock-opt${String(v) === String(value) ? ' on' : ''}" role="option" aria-selected="${String(v) === String(value)}" data-movie-pick="${esc(name)}" data-movie-value="${esc(v)}">${esc(t)}</button>`).join('')}
-    </div>
-  </div>`;
+function syncMovieMenu() {
+  const dock = document.querySelector('[data-movie-dock]');
+  if (!dock) return;
+  dock.querySelector('[data-movie-sheet]').hidden = !movieMenuOpen;
+  document.querySelector('.movies-page')?.classList.toggle('menu-open', movieMenuOpen);
+  dock.querySelector('[data-movie-menu]')?.setAttribute('aria-expanded', String(movieMenuOpen));
+  requestAnimationFrame(applyGlass);          // the sheet has a size only once it is shown
 }
 function movieDock(view, genres, decades, countries, meta) {
-  const flow = meta.flow;
-  const sortL = dockLabel(MOVIE_SORTS, view.sort, 'Sort');
-  const genreL = view.genre || 'All genres';
-  const decadeL = view.decade ? view.decade + 's' : 'All decades';
-  const countryL = view.country || 'All countries';
-  const active = moviesFlowActive(view);   // Reset only when something is actually chosen
-  const chips = flow
-    ? `<button type="button" class="movie-dock-chip" data-movie-panel="sort" aria-expanded="false">${esc(sortL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="genre" aria-expanded="false">${esc(genreL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="decade" aria-expanded="false">${esc(decadeL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="country" aria-expanded="false">${esc(countryL)}</button>
-      <button type="button" class="movie-dock-chip movie-dock-chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>`
-    : `<span class="movie-dock-hint">Drag the ring · click a poster for details</span>
-      <button type="button" class="movie-dock-chip" data-movie-panel="sort" aria-expanded="false">Browse: ${esc(sortL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="genre" aria-expanded="false">${esc(genreL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="decade" aria-expanded="false">${esc(decadeL)}</button>
-      <button type="button" class="movie-dock-chip" data-movie-panel="country" aria-expanded="false">${esc(countryL)}</button>
-      <button type="button" class="movie-dock-chip movie-dock-chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
-      <button type="button" class="movie-dock-chip" data-galaxy-reshuffle>Shuffle ring</button>`;
+  const active = moviesFlowActive(view);      // something is chosen: Reset is offered
   const pages = meta.pages > 1
     ? `<div class="movie-dock-pages">
       <button type="button" class="movie-dock-page" data-movie-page="prev" aria-label="Previous page"${meta.page <= 1 ? ' disabled' : ''}>\u2039</button>
       <span class="movie-dock-page-label">Page ${meta.page} of ${meta.pages}</span>
       <button type="button" class="movie-dock-page" data-movie-page="next" aria-label="Next page"${meta.page >= meta.pages ? ' disabled' : ''}>\u203a</button>
-    </div>`
-    : flow && meta.total > 0 ? `<div class="movie-dock-pages"><span class="movie-dock-page-label">${meta.total} titles</span></div>` : '';
-  return `<div class="movie-dock lg" data-movie-dock role="group" aria-label="Sort and filter movies">
-    <div class="movie-dock-bar">${chips}${active ? '<button type="button" class="movie-dock-chip movie-dock-reset" data-movie-reset>Reset</button>' : ''}</div>
-  ${pages}
-    <div class="movie-dock-sheet" data-movie-sheet hidden>
-      ${movieDockPanel('sort', 'Sort', MOVIE_SORTS, view.sort)}
-      ${movieDockPanel('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
-      ${movieDockPanel('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
-      ${movieDockPanel('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
+    </div>` : '';
+  return `<div class="movie-dock" data-movie-dock>
+    <div class="movie-menu lg" data-movie-sheet role="group" aria-label="Filter movies"${movieMenuOpen ? '' : ' hidden'}><div class="movie-menu-scroll">
+      ${movieChoice('sort', 'Sort', MOVIE_SORTS, view.sort)}
+      ${movieChoice('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
+      ${movieChoice('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
+      ${movieChoice('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
+      <div class="movie-menu-group"><div class="movie-menu-options">
+        <button type="button" class="movie-menu-opt${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
+        ${meta.flow ? '' : '<button type="button" class="movie-menu-opt" data-galaxy-reshuffle>Shuffle ring</button>'}
+        ${active ? '<button type="button" class="movie-menu-opt movie-menu-reset" data-movie-reset>Reset</button>' : ''}
+      </div></div>
+    </div></div>
+    <div class="movie-dock-row">
+      <button type="button" class="movie-filter lg${active ? ' on' : ''}" data-movie-menu aria-haspopup="true" aria-expanded="${movieMenuOpen}">Filters</button>
+      ${pages}
     </div>
   </div>`;
 }
@@ -879,7 +873,6 @@ function viewList(kind) {
     LS.set('view:movies', viewResolved);
   }
   const slice = moviePageSlice(filtered, viewResolved.page);
-  const count = filtered.length === all.length ? String(all.length) : `${filtered.length} of ${all.length}`;
   const pool = all.filter(it => posterOf(it) || it.files[0]?.thumb);
   const galaxyPick = pickGalaxyMovies(pool, viewResolved.galaxySeed || 1);
   const galaxyPickKeys = galaxyPick.map(it => it.key).join(',');
@@ -887,8 +880,8 @@ function viewList(kind) {
   const galaxyBlock = `<div class="movies-galaxy" data-galaxy-keys="${esc(galaxyPickKeys)}">
     <div class="galaxy-viewport" id="movieGalaxyViewport"><div class="galaxy-ring" id="movieGalaxyRing"></div></div>
   </div>`;
-  return `<div class="page movies-page${flow ? ' movies-page--flow' : ' movies-page--galaxy'}">
-    <h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>
+  return `<div class="page movies-page${flow ? ' movies-page--flow' : ' movies-page--galaxy'}${movieMenuOpen ? ' menu-open' : ''}">
+    <h1 class="sr-only">Movies</h1>
     <div class="movies-stage">${flow ? flowBlock : galaxyBlock}</div>
     ${movieDock(viewResolved, genres, decades, countries, { flow, page: slice.page, pages: slice.pages, total: slice.total })}</div>`;
 }
@@ -1502,6 +1495,7 @@ let lastRoute = '';
 const savedScroll = new Map();
 function render() {
   stopMovieGalaxy();
+  if (routeInfo().name !== 'movies') movieMenuOpen = false;
   closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
     let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
@@ -1774,7 +1768,7 @@ document.addEventListener('click', e => {
   if (bio) { const id = bio.dataset.bioToggle; if (bioOpen.has(id)) bioOpen.delete(id); else bioOpen.add(id); render(); return; }
   const retry = t.closest('[data-person-retry]');
   if (retry) { personFailed.delete(retry.dataset.personRetry); render(); return; }
-  if (t.closest('[data-galaxy-reshuffle]')) { setMovieView({ galaxySeed: Date.now() }); return; }
+  if (t.closest('[data-galaxy-reshuffle]')) { restartMovieGalaxy(); setMovieView({ galaxySeed: Date.now() }); return; }
   const pageBtn = t.closest('[data-movie-page]');
   if (pageBtn && !pageBtn.disabled) {
     const v = movieView();
@@ -1786,33 +1780,13 @@ document.addEventListener('click', e => {
   if (pick) {
     const name = pick.dataset.moviePick;
     const value = pick.dataset.movieValue ?? '';
-    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, '[data-movie-dock]');
+    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, '[data-movie-menu]');
     return;
   }
-  const dockPanel = t.closest('[data-movie-panel]');
-  if (dockPanel) {
-    const dock = t.closest('[data-movie-dock]');
-    const name = dockPanel.dataset.moviePanel;
-    const sheet = dock?.querySelector('[data-movie-sheet]');
-    const body = dock?.querySelector(`[data-movie-panel-body="${name}"]`);
-  const open = dockPanel.getAttribute('aria-expanded') === 'true';
-    dock?.querySelectorAll('[data-movie-panel]').forEach(b => { b.setAttribute('aria-expanded', 'false'); });
-    dock?.querySelectorAll('[data-movie-panel-body]').forEach(p => { p.hidden = true; });
-    if (!open && sheet && body) {
-      dockPanel.setAttribute('aria-expanded', 'true');
-      sheet.hidden = false;
-      body.hidden = false;
-    } else if (sheet) sheet.hidden = true;
-    return;
-  }
-  if (!t.closest('[data-movie-dock]') && document.querySelector('[data-movie-dock] [data-movie-sheet]:not([hidden])')) {
-    const dock = document.querySelector('[data-movie-dock]');
-    dock?.querySelector('[data-movie-sheet]')?.setAttribute('hidden', '');
-    dock?.querySelectorAll('[data-movie-panel]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-    dock?.querySelectorAll('[data-movie-panel-body]').forEach(p => { p.hidden = true; });
-  }
-  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-dock]'); return; }
-  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-dock]'); return; }
+  if (t.closest('[data-movie-menu]')) { movieMenuOpen = !movieMenuOpen; syncMovieMenu(); return; }
+  if (movieMenuOpen && !t.closest('[data-movie-dock]')) { movieMenuOpen = false; syncMovieMenu(); }
+  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-menu]'); return; }
+  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-menu]'); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
@@ -1837,6 +1811,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
   if (closeTrailer()) return;
+  if (movieMenuOpen) { movieMenuOpen = false; syncMovieMenu(); return; }
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
   else if (!$('#search').hidden) closeSearch();
   else if (!$('#setup').hidden) $('#setup').hidden = true;

@@ -10,20 +10,21 @@ function fakeEl(tag = 'div') {
     fire(t, ev = {}) { for (const f of [...(listeners[t] || [])]) f({ preventDefault() { ev.prevented = true; }, ...ev }); return ev; },
     count(t) { return (listeners[t] || []).length; } };
 }
+let pending = null;
 async function setup() {
   const win = fakeEl('window');
   globalThis.window = win;
   globalThis.document = { createElement: fakeEl };
-  globalThis.requestAnimationFrame = () => 1;
+  globalThis.requestAnimationFrame = f => { pending = f; return 1; };
   globalThis.cancelAnimationFrame = () => {};
   const ring = fakeEl();
   const viewport = fakeEl('viewport');
   viewport.querySelector = sel => (sel === '.galaxy-ring' ? ring : null);
-  const { initMovieGalaxy } = await import('../lib/galaxy.mjs');
+  const { initMovieGalaxy, restartMovieGalaxy } = await import('../lib/galaxy.mjs');
   const opened = [];
   const ctl = initMovieGalaxy(viewport, [{ key: 'a' }, { key: 'b' }, { key: 'c' }], { posterUrl: () => 'p.jpg', onOpen: k => opened.push(k) });
   const cards = ring.children.filter(c => c.className === 'g-card');
-  return { win, viewport, ring, cards, opened, ctl };
+  return { win, viewport, ring, cards, opened, ctl, make: () => { const r2 = fakeEl(), v2 = fakeEl('viewport'); v2.querySelector = s => (s === '.galaxy-ring' ? r2 : null); const c = initMovieGalaxy(v2, [{ key: 'a' }, { key: 'b' }, { key: 'c' }], { posterUrl: () => 'p.jpg', onOpen() {} }); return { v2, r2, c, cards: r2.children.filter(x => x.className === 'g-card') }; }, restartMovieGalaxy };
 }
 
 test('a plain click on a poster opens it (pointerup arrives before mouseup)', async () => {
@@ -66,4 +67,23 @@ test('plain wheel scrolls the page; Ctrl/Cmd+wheel zooms the ring', async () => 
   assert.equal(viewport.count('wheel'), 0);                    // stop() removes every listener
   assert.equal(viewport.count('mousedown'), 0);
   assert.equal(ring.children.length, 0);
+});
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+test('a ring rebuilt right after another one carries on instead of dealing again; Shuffle deals afresh; a long gap deals afresh',async()=>{
+  const s = await setup();
+  s.ctl.stop();                                              // clear any state from earlier tests
+  s.restartMovieGalaxy();
+  const first = s.make();
+  await sleep(160);                                          // the ring becomes ready 120 ms after it is built
+  const now = performance.now(); pending(now - 1800); pending(now);   // first frame fixes the start; 1.8 s later the deal (1.4 s) is over
+  first.c.stop();
+  const second = s.make();                                   // the page was redrawn: a new ring straight away
+  assert.notEqual(second.cards[0].style.opacity, undefined); // already painted in its carried-on pose, no empty frame
+  assert.ok(parseFloat(second.cards[0].style.opacity) > 0.2);
+  second.c.stop();
+  s.restartMovieGalaxy();
+  const shuffled = s.make();
+  assert.equal(shuffled.cards[0].style.opacity, undefined);  // fresh ring: nothing painted until it is dealt
+  shuffled.c.stop();
 });

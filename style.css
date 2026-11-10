@@ -416,7 +416,6 @@ body{overflow-x:clip}
 
 /* Movies: galaxy ring (default) or poster grid after filters / sort; controls sit in a bottom liquid-glass dock. */
 .movies-page{padding-bottom:200px}
-.movies-page--galaxy h1{text-align:center;margin-bottom:8px}
 .movies-stage{min-height:min(68vh,720px);display:flex;align-items:center;justify-content:center;margin:0 auto;padding:0 var(--pad)}
 .movies-galaxy{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
 .movies-flow{width:100%}
@@ -428,25 +427,37 @@ body{overflow-x:clip}
 .g-card-poster{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;user-select:none}
 .g-card-fallback{display:flex;align-items:center;justify-content:center;height:100%;padding:6px;font-size:10px;font-weight:600;text-align:center;color:rgba(255,255,255,.75);line-height:1.2}
 .g-dust{position:absolute;left:0;top:0;width:4px;height:4px;border-radius:999px;background:rgba(255,255,255,.55);box-shadow:0 0 10px rgba(255,255,255,.35);pointer-events:none;transform-style:preserve-3d;will-change:transform,opacity}
-.movie-dock{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;width:min(920px,calc(100vw - 28px));padding:12px 14px 14px;border-radius:28px;display:flex;flex-direction:column;gap:10px}
-.movie-dock-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
-.movie-dock-hint{flex:1 1 100%;text-align:center;font-size:13px;color:var(--muted);padding:0 8px 2px}
-.movie-dock-chip{padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font:inherit;font-size:13px;color:rgba(255,255,255,.88);cursor:pointer;white-space:nowrap}
-.movie-dock-chip:hover{background:rgba(255,255,255,.14)}
-.movie-dock-chip.on,.movie-dock-chip-toggle.on{background:rgba(255,255,255,.92);color:#111;border-color:rgba(255,255,255,.5)}
-.movie-dock-reset{background:rgba(255,120,100,.18);border-color:rgba(255,140,120,.35)}
-.movie-dock-pages{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:2px}
-.movie-dock-page{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.movie-dock{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;width:min(560px,calc(100vw - 28px));display:flex;flex-direction:column;align-items:center;gap:12px;pointer-events:none}
+.movie-dock > *{pointer-events:auto}
+.movie-dock-row{display:flex;align-items:center;justify-content:center;gap:12px}
+.movie-filter{height:48px;padding:0 30px;border-radius:999px;font:inherit;font-size:15px;font-weight:500;letter-spacing:.02em;color:#fff;cursor:pointer}
+.movie-filter.lg.on{background:rgba(255,255,255,.2)!important}
+.movie-filter:hover{transform:scale(1.04)}
+.movie-filter:focus-visible,.movie-menu-opt:focus-visible,.movie-dock-page:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
+/* The sheet is the glass; the scrolling lives in an inner box so the rim and lens stay put while the list scrolls. */
+.movie-menu{width:100%;border-radius:28px;color:#fff}
+.movie-menu[hidden]{display:none}
+.movie-menu-scroll{scrollbar-width:none;background:rgba(18,18,22,.46);max-height:min(54vh,440px);overflow:auto;overscroll-behavior:contain;padding:20px 20px 16px;display:flex;flex-direction:column;gap:16px;border-radius:inherit}
+.movie-menu-title{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.movie-menu-scroll::-webkit-scrollbar{display:none}
+.movie-menu-options{display:flex;flex-wrap:wrap;gap:8px}
+.movie-menu-opt{padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font:inherit;font-size:13px;color:inherit;cursor:pointer}
+.movie-menu-opt:hover{background:rgba(255,255,255,.18)}
+.movie-menu-opt.on{background:#fff;color:#111;border-color:rgba(255,255,255,.6)}
+.movie-menu-reset{background:rgba(255,120,100,.2);border-color:rgba(255,140,120,.4)}
+.movie-dock-pages{display:flex;align-items:center;justify-content:center;gap:12px}
+.movie-dock-page{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.1);color:inherit;font-size:20px;line-height:1;cursor:pointer}
 .movie-dock-page:disabled{opacity:.35;cursor:default}
 .movie-dock-page-label{font-size:13px;color:var(--muted);min-width:7em;text-align:center}
-.movie-dock-sheet{margin-top:2px;padding:10px 6px 4px;border-top:1px solid rgba(255,255,255,.08)}
-.movie-dock-panel-title{margin:0 0 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
-.movie-dock-options{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-height:min(34vh,260px);overflow:auto;padding:0 4px 6px}
-.movie-dock-opt{padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font:inherit;font-size:13px;color:rgba(255,255,255,.85);cursor:pointer}
-.movie-dock-opt.on{background:#fff;color:#111;border-color:rgba(255,255,255,.45)}
-.movie-dock-chip:focus-visible,.movie-dock-opt:focus-visible,.movie-dock-page:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
-[data-theme="light"] .movie-dock-chip,[data-theme="light"] .movie-dock-opt,[data-theme="light"] .movie-dock-page{background:var(--surface);border-color:rgba(23,27,36,.12);color:var(--text)}
-[data-theme="light"] .movie-dock-chip.on,[data-theme="light"] .movie-dock-chip-toggle.on,[data-theme="light"] .movie-dock-opt.on{background:#1b202b;color:#fff}
+[data-theme="light"] .movie-filter,[data-theme="light"] .movie-menu{color:var(--text)}
+[data-theme="light"] .movie-menu-scroll{background:rgba(247,247,249,.62)}
+/* While the sheet is open the ring behind it recedes, so the options stay easy to read. */
+.movies-stage{transition:opacity .3s ease}
+.movies-page.menu-open .movies-stage{opacity:.2}
+[data-theme="light"] .movie-menu-opt,[data-theme="light"] .movie-dock-page{background:rgba(23,27,36,.06);border-color:rgba(23,27,36,.16);color:var(--text)}
+[data-theme="light"] .movie-menu-opt.on{background:#1b202b;color:#fff}
+[data-theme="light"] .movie-filter.lg.on{background:rgba(23,27,36,.12)!important}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 /* Legacy toolbar (shows elsewhere if reused) */
 /* Search page (touch screens): a plain field, no glass, no overlay. 16px+ text so iPhone does not zoom in. */
 .search-page .sfield{margin:0 var(--pad) 26px}

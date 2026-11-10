@@ -96,7 +96,7 @@ test('modifier combinations never reach the player, and are never cancelled eith
 
 test('Genres lives in the Movies toolbar; the nav has no Genres tab and old links are redirected',()=>{
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.doesNotMatch(html,/data-route="genres"/);assert.match(source,/movieDockPanel\('genre', 'Genre'/);
+  assert.doesNotMatch(html,/data-route="genres"/);assert.match(source,/movieChoice\('genre', 'Genre'/);
   assert.match(source,/startsWith\('#\/genres'\)/);assert.match(source,/history\.replaceState\(null, '', location\.pathname \+ location\.search \+ '#\/movies'\)/);
   assert.doesNotMatch(source,/function viewGenres/);
 });
@@ -299,7 +299,7 @@ test('a select is never focused from code on touch screens (iPhone opens its pic
   let focused=0;const sel={tagName:'SELECT',focus:()=>focused++},btn={tagName:'BUTTON',focus:()=>focused+=10};
   const mk=(el,touch)=>fnMany(['keepFocus'],{$:()=>el,window:{matchMedia:()=>({matches:touch})}}).keepFocus;
   mk(sel,true)('x');assert.equal(focused,0);mk(sel,false)('x');assert.equal(focused,1);mk(btn,true)('x');assert.equal(focused,11);
-  assert.match(source,/LS\.del\('view:movies'\); render\(\); keepFocus\('\[data-movie-dock\]'\)/);
+  assert.match(source,/LS\.del\('view:movies'\); render\(\); keepFocus\('\[data-movie-menu\]'\)/);
 });
 
 test('iPhone fullscreen keeps the film upright and inside the visible screen',()=>{
@@ -347,4 +347,29 @@ test('Movies: touch screens always get the poster grid, the ring is for mouse sc
   assert.match(source,/const touch = searchOnPage\(\);\s*const flow = touch \|\| moviesFlowActive\(view\);/);
   assert.match(source,/const active = moviesFlowActive\(view\);/);
   assert.doesNotMatch(source,/const active = flow;/);
+});
+
+test('Movies page: no count heading, no hint line, no Browse chip; one Filters button opens one glass sheet',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(source,/<h1 class="sr-only">Movies<\/h1>/);
+  assert.doesNotMatch(source,/Drag the ring/);assert.doesNotMatch(source,/Browse: /);assert.doesNotMatch(source,/movie-dock-hint/);
+  assert.doesNotMatch(source,/<h1>Movies <span/);
+  assert.match(source,/class="movie-filter lg/);assert.match(source,/class="movie-menu lg" data-movie-sheet/);
+  assert.match(source,/Shuffle ring/);assert.match(source,/4K only/);
+  assert.match(css,/\.movie-menu-scroll\{[^}]*max-height:/);              // the glass wrapper does not scroll, an inner box does
+  assert.doesNotMatch(css.match(/\.movie-menu\{[^}]*\}/)[0],/overflow/);
+});
+test('Movies filter sheet stays open while choosing, closes on outside click, Escape, and leaving the page',()=>{
+  assert.match(source,/if \(t\.closest\('\[data-movie-menu\]'\)\) \{ movieMenuOpen = !movieMenuOpen; syncMovieMenu\(\); return; \}/);
+  assert.match(source,/if \(movieMenuOpen && !t\.closest\('\[data-movie-dock\]'\)\) \{ movieMenuOpen = false; syncMovieMenu\(\); \}/);
+  assert.match(source,/if \(closeTrailer\(\)\) return;\n  if \(movieMenuOpen\) \{ movieMenuOpen = false; syncMovieMenu\(\); return; \}/);
+  assert.match(source,/if \(routeInfo\(\)\.name !== 'movies'\) movieMenuOpen = false;/);
+  assert.match(source,/restartMovieGalaxy\(\); setMovieView\(\{ galaxySeed: Date\.now\(\) \}\)/);   // Shuffle deals a fresh ring
+});
+
+test('open Filters sheet is tinted for legibility and the ring recedes behind it',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css,/\.movie-menu-scroll\{[^}]*background:rgba\(18,18,22,\.46\)/);
+  assert.match(css,/\.movies-page\.menu-open \.movies-stage\{opacity:\.2\}/);
+  assert.match(source,/movieMenuOpen \? ' menu-open' : ''/);assert.match(source,/classList\.toggle\('menu-open', movieMenuOpen\)/);
 });
