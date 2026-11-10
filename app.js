@@ -1109,7 +1109,7 @@ function lensMap(W, H, R, bezel) {
   return c.toDataURL('image/png');
 }
 function glassFilter(W, H, R, bezel, S) {
-  const id = `lg-${W}x${H}-${R}`;
+  const id = `lg-${W}x${H}-${R}-${bezel}-${S}`;
   if (lensCache.has(id)) return id;
   let holder = document.getElementById('lgdefs');
   if (!holder) { holder = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); holder.id = 'lgdefs'; holder.setAttribute('width', '0'); holder.setAttribute('height', '0'); holder.style.position = 'absolute'; document.body.appendChild(holder); }
@@ -1128,13 +1128,14 @@ function glassFilter(W, H, R, bezel, S) {
   return id;
 }
 // The lens for one element, sized to it exactly (a lens built for another size bends the wrong way).
-function lensFor(el) {
+function lensFor(el, strong = false) {
   const W = Math.round(el.offsetWidth), H = Math.round(el.offsetHeight);
   if (!W || !H) return null;
   const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, W / 2, H / 2);
-  const bezel = Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
-  return glassFilter(W, H, Math.round(R), Math.round(bezel), Math.round(bezel * 3.2));
+  const bezel = strong ? Math.max(12, Math.min(R, 40)) : Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
+  return glassFilter(W, H, Math.round(R), Math.round(bezel), Math.round(bezel * (strong ? 4.5 : 3.2)));
 }
+const desktopNav = matchMedia('(min-width:821px)');
 
 // ---------- Player controls: the same Liquid Glass inside movi-player's shadow DOM ----------
 // Control groups get the clear lens like the site's buttons; menus and panels get the lens plus a little more blur,
@@ -1204,7 +1205,7 @@ function applyGlass() {
   document.querySelectorAll('.lg').forEach(el => {
     // The SVG lens cannot read content inside a nested scroll container, so search keeps the plain glass layer.
     if (el.closest('#search')) { el.style.removeProperty('backdrop-filter'); return; }
-    const id = lensFor(el); if (!id) return;
+    const id = lensFor(el, el.id === 'nav' && desktopNav.matches); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
