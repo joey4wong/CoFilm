@@ -380,3 +380,7 @@ test('a reload always starts Movies from the ring: the saved view is dropped at 
   const i=source.indexOf("LS.del('view:movies');\nconst movieView"),j=source.indexOf('const movieView');
   assert.ok(source.indexOf("LS.del('view:movies');")<j,'the saved view is cleared before the first read');
 });
+
+test('page controls appear only for the poster grid, never with the ring',()=>{
+  assert.match(source,/const pages = meta\.flow && meta\.pages > 1/);
+});

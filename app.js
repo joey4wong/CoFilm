@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=136';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=136';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=137';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=137';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -819,7 +819,7 @@ function syncMovieMenu() {
 function movieDock(view, genres, decades, countries, meta) {
   const active = moviesFlowActive(view);      // something is chosen: Reset is offered
   const chip = (name, text) => `<button type="button" class="movie-chip${movieMenuOpen === name ? ' open' : ''}${view[name] ? ' set' : ''}" data-movie-panel="${name}" aria-haspopup="listbox" aria-expanded="${movieMenuOpen === name}">${esc(text)}</button>`;
-  const pages = meta.pages > 1
+  const pages = meta.flow && meta.pages > 1      // page controls belong to the poster grid only; the ring always shows its own 22
     ? `<div class="movie-dock-pages">
       <button type="button" class="movie-dock-page" data-movie-page="prev" aria-label="Previous page"${meta.page <= 1 ? ' disabled' : ''}>\u2039</button>
       <span class="movie-dock-page-label">Page ${meta.page} of ${meta.pages}</span>
