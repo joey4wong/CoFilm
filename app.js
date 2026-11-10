@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=124';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=124';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=125';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=125';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1291,6 +1291,7 @@ function applyGlass() {
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
+    if (el.matches('[data-movie-ind]')) { applyGlassInd(); return; }
     const id = lensFor(el, el.id === 'nav' || el.matches('#search .searchfield')); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
@@ -1315,7 +1316,7 @@ function applyGlass() {
 }
 function applyGlassInd() {   // re-fit only the sliding drop's lens to its new size
   const ind = document.querySelector('[data-movie-ind]'); if (!ind) return;
-  const W = Math.round(ind.offsetWidth), H = Math.round(ind.offsetHeight);
+  const W = Math.round(parseFloat(ind.style.width)), H = Math.round(parseFloat(ind.style.height));   // the target size, not the mid-slide one
   const id = W && H ? glassFilter(W, H, Math.round(H / 2), 9, 12) : null;   // small bend: the label under the drop stays readable
   if (id) ind.style.backdropFilter = `url(#${id}) blur(.3px) saturate(1.4) brightness(1.06)`;
 }
