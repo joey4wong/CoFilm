@@ -87,3 +87,20 @@ test('a ring rebuilt right after another one carries on instead of dealing again
   assert.equal(shuffled.cards[0].style.opacity, undefined);  // fresh ring: nothing painted until it is dealt
   shuffled.c.stop();
 });
+
+test('dragging never changes the ring angle; clicks still open, drags still do not',async()=>{
+  const s = await setup();
+  s.ctl.stop(); s.restartMovieGalaxy();
+  const r = s.make();
+  await sleep(160);
+  const now = performance.now();
+  pending(now - 100);                                          // first frame
+  const before = r.r2.style.transform;
+  r.v2.fire('mousedown', { clientX: 100, clientY: 100 });
+  s.win.fire('mousemove', { clientX: 300, clientY: 260 });     // a big drag
+  pending(now + 50);
+  s.win.fire('mouseup');
+  assert.equal(r.r2.style.transform, before);                  // same scale / rotateX / rotateZ
+  assert.match(before, /rotateX\(-19\.5deg\) rotateZ\(24deg\)/);
+  r.c.stop();
+});

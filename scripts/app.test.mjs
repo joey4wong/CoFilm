@@ -384,3 +384,9 @@ test('a reload always starts Movies from the ring: the saved view is dropped at 
 test('page controls appear only for the poster grid, never with the ring',()=>{
   assert.match(source,/const pages = meta\.flow && meta\.pages > 1/);
 });
+
+test('the ring viewport has no grab cursor and does not trap touch scrolling',()=>{
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  const rule=css.match(/\.galaxy-viewport\{[^}]*\}/)[0];
+  assert.match(rule,/cursor:default/);assert.doesNotMatch(rule,/cursor:grab/);assert.doesNotMatch(rule,/touch-action:none/);
+});
