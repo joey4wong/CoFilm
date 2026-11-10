@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=122';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=122';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=123';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=123';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1315,7 +1315,7 @@ function applyGlass() {
 }
 function applyGlassInd() {   // re-fit only the sliding drop's lens to its new size
   const ind = document.querySelector('[data-movie-ind]'); if (!ind) return;
-  const id = lensFor(ind, true); if (id) ind.style.backdropFilter = `url(#${id}) blur(.4px) saturate(1.6) brightness(1.08)`;
+  const id = lensFor(ind); if (id) ind.style.backdropFilter = `url(#${id}) blur(.3px) saturate(1.4) brightness(1.06)`;
 }
 window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGlass));
 let glassT = 0;
