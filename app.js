@@ -839,8 +839,24 @@ function movieDock(view, genres, decades, countries, meta) {
       ${meta.flow ? '' : '<button type="button" class="movie-chip" data-galaxy-reshuffle>Shuffle ring</button>'}
       ${active ? '<button type="button" class="movie-chip movie-chip-reset" data-movie-reset>Reset</button>' : ''}
     </div>
+    <span class="movie-ind lg" data-movie-ind aria-hidden="true"></span>
     ${pages}
   </div>`;
+}
+// One liquid-glass drop slides under the bar's controls (iOS 26 style): it rests on the open / pressed control and
+// follows the pointer or keyboard focus; the other controls carry no boxes of their own.
+function placeMovieInd(target) {
+  const dock = document.querySelector('[data-movie-dock]');
+  const ind = dock?.querySelector('[data-movie-ind]'), bar = dock?.querySelector('.movie-bar');
+  if (!ind || !bar) return;
+  const t = target || bar.querySelector('.movie-chip.open');
+  if (!t || !t.offsetWidth) { ind.classList.remove('show'); return; }
+  const first = !ind.classList.contains('show');
+  if (first) ind.style.transition = 'none';
+  const x = bar.offsetLeft + t.offsetLeft - 3, y = bar.offsetTop + t.offsetTop - 3, w = t.offsetWidth + 6, h = t.offsetHeight + 6;
+  ind.style.width = w + 'px'; ind.style.height = h + 'px'; ind.style.transform = `translate(${x}px,${y}px)`;
+  ind.classList.add('show');
+  if (first) { void ind.offsetWidth; ind.style.transition = ''; }
 }
 function startMovieGalaxy(picked) {
   stopMovieGalaxy();
@@ -1271,6 +1287,7 @@ function unwatchPlayerGlass() {
   cancelAnimationFrame(playerGlassFrame); playerGlassFrame = 0;
 }
 function applyGlass() {
+  placeMovieInd();
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
@@ -1284,6 +1301,21 @@ function applyGlass() {
     if (lensCache.size <= 16) break;
     if (!activeFilters.has(id)) { lensCache.delete(id); document.getElementById(id)?.remove(); }
   }
+}
+{
+  const hoverInd = e => {
+    const chip = e.target.closest?.('.movie-bar .movie-chip'); if (!chip) return;
+    placeMovieInd(chip); if (GLASS_ON) requestAnimationFrame(applyGlassInd);
+  };
+  const restInd = () => { placeMovieInd(); if (GLASS_ON) requestAnimationFrame(applyGlassInd); };
+  document.addEventListener('pointerover', hoverInd);
+  document.addEventListener('focusin', hoverInd);
+  document.addEventListener('pointerout', e => { if (e.target.closest?.('.movie-bar') && !e.relatedTarget?.closest?.('.movie-bar')) restInd(); });
+  document.addEventListener('focusout', e => { if (e.target.closest?.('.movie-bar') && !e.relatedTarget?.closest?.('.movie-bar')) restInd(); });
+}
+function applyGlassInd() {   // re-fit only the sliding drop's lens to its new size
+  const ind = document.querySelector('[data-movie-ind]'); if (!ind) return;
+  const id = lensFor(ind, true); if (id) ind.style.backdropFilter = `url(#${id}) blur(.4px) saturate(1.6) brightness(1.08)`;
 }
 window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGlass));
 let glassT = 0;

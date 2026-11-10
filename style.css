@@ -431,11 +431,17 @@ body{overflow-x:clip}
 .movie-dock > *{pointer-events:auto}
 /* One glass bar holds every control; the list for Genre / Decade / Country opens above it in a second glass sheet. */
 .movie-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:30px;max-width:100%;color:#fff}
-.movie-chip{padding:9px 18px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);font:inherit;font-size:14px;color:inherit;cursor:pointer;white-space:nowrap}
-.movie-chip:hover{background:rgba(255,255,255,.18)}
-.movie-chip.open{background:#fff;color:#111;border-color:rgba(255,255,255,.6)}
-.movie-chip.set:not(.open){border-color:rgba(255,255,255,.6)}
-.movie-chip-reset{background:rgba(255,120,100,.2);border-color:rgba(255,140,120,.4)}
+.movie-chip{position:relative;z-index:1;padding:9px 18px;border-radius:999px;background:none;border:0;font:inherit;font-size:14px;color:inherit;opacity:.82;cursor:pointer;white-space:nowrap;transition:opacity .2s}
+.movie-chip:hover,.movie-chip:focus-visible,.movie-chip.open{opacity:1}
+.movie-chip.open,.movie-chip.set{font-weight:600}
+.movie-chip-reset{color:#ff8f7e;opacity:1}
+/* The sliding Liquid Glass drop: sits above the controls (so it refracts them) and never takes the pointer. */
+.movie-ind{position:absolute;left:0;top:0;z-index:2;display:block;border-radius:999px;pointer-events:none;opacity:0;
+  background:rgba(255,255,255,.16)!important;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.22),inset 0 1px 1px rgba(255,255,255,.35),inset 0 -8px 14px -8px rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.22)!important;
+  transition:transform .5s cubic-bezier(.3,1.35,.5,1),width .5s cubic-bezier(.3,1.35,.5,1),height .5s cubic-bezier(.3,1.35,.5,1),opacity .2s}
+.movie-ind.show{opacity:1}
+[data-theme="light"] .movie-ind.lg{background:rgba(255,255,255,.35)!important;box-shadow:inset 0 0 0 .5px rgba(23,27,36,.14),inset 0 1px 1px rgba(255,255,255,.8),inset 0 -8px 14px -8px rgba(23,27,36,.12),0 4px 14px rgba(23,27,36,.16)!important}
 .movie-chip:focus-visible,.movie-menu-opt:focus-visible,.movie-dock-page:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:3px}
 /* The sheet is the glass; the scrolling lives in an inner box so the rim and lens stay put while the list scrolls. */
 .movie-menu{width:100%;border-radius:28px;color:#fff}
@@ -452,9 +458,9 @@ body{overflow-x:clip}
 .movie-dock-page:disabled{opacity:.35;cursor:default}
 .movie-dock-page-label{font-size:13px;color:var(--muted);min-width:7em;text-align:center}
 [data-theme="light"] .movie-bar,[data-theme="light"] .movie-menu{color:var(--text)}
-[data-theme="light"] .movie-chip,[data-theme="light"] .movie-menu-opt,[data-theme="light"] .movie-dock-page{background:rgba(23,27,36,.06);border-color:rgba(23,27,36,.16);color:var(--text)}
-[data-theme="light"] .movie-chip.open,[data-theme="light"] .movie-menu-opt.on{background:#1b202b;color:#fff}
-[data-theme="light"] .movie-chip.set:not(.open){border-color:rgba(23,27,36,.5)}
+[data-theme="light"] .movie-menu-opt,[data-theme="light"] .movie-dock-page{background:rgba(23,27,36,.06);border-color:rgba(23,27,36,.16);color:var(--text)}
+[data-theme="light"] .movie-menu-opt.on{background:#1b202b;color:#fff}
+[data-theme="light"] .movie-chip-reset{color:#d4442f}
 [data-theme="light"] .movie-menu-scroll{background:rgba(247,247,249,.62)}
 /* While a list is open the ring behind it recedes, so the options stay easy to read. */
 .movies-stage{transition:opacity .3s ease}
