@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=119';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=119';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=120';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=120';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -794,11 +794,12 @@ function setMovieView(patch, focus) {
   render();
   keepFocus(focus);
 }
-// One liquid-glass "Filters" button opens one glass sheet holding every choice. The open state survives page redraws
-// (picking a filter redraws the page), so the sheet stays open while you choose.
-let movieMenuOpen = false;
+// The controls sit directly in ONE liquid-glass bar. Genre, Decade and Country open a glass list above the bar;
+// 4K only and Shuffle ring are plain buttons. `movieMenuOpen` is the name of the open list, or ''.
+let movieMenuOpen = '';
 function movieChoice(name, label, options, value) {
-  return `<div class="movie-menu-group"><p class="movie-menu-title">${esc(label)}</p>
+  return `<div class="movie-menu-group" data-movie-group="${name}"${movieMenuOpen === name ? '' : ' hidden'}>
+    <p class="movie-menu-title">${esc(label)}</p>
     <div class="movie-menu-options" role="listbox" aria-label="${esc(label)}">
       ${options.map(([v, t]) => `<button type="button" class="movie-menu-opt${String(v) === String(value) ? ' on' : ''}" role="option" aria-selected="${String(v) === String(value)}" data-movie-pick="${esc(name)}" data-movie-value="${esc(v)}">${esc(t)}</button>`).join('')}
     </div></div>`;
@@ -807,12 +808,14 @@ function syncMovieMenu() {
   const dock = document.querySelector('[data-movie-dock]');
   if (!dock) return;
   dock.querySelector('[data-movie-sheet]').hidden = !movieMenuOpen;
-  document.querySelector('.movies-page')?.classList.toggle('menu-open', movieMenuOpen);
-  dock.querySelector('[data-movie-menu]')?.setAttribute('aria-expanded', String(movieMenuOpen));
-  requestAnimationFrame(applyGlass);          // the sheet has a size only once it is shown
+  dock.querySelectorAll('[data-movie-group]').forEach(g => { g.hidden = g.dataset.movieGroup !== movieMenuOpen; });
+  dock.querySelectorAll('[data-movie-panel]').forEach(b => { const on = b.dataset.moviePanel === movieMenuOpen; b.setAttribute('aria-expanded', String(on)); b.classList.toggle('open', on); });
+  document.querySelector('.movies-page')?.classList.toggle('menu-open', !!movieMenuOpen);
+  requestAnimationFrame(applyGlass);          // the list has a size only once it is shown
 }
 function movieDock(view, genres, decades, countries, meta) {
   const active = moviesFlowActive(view);      // something is chosen: Reset is offered
+  const chip = (name, text) => `<button type="button" class="movie-chip${movieMenuOpen === name ? ' open' : ''}${view[name] ? ' set' : ''}" data-movie-panel="${name}" aria-haspopup="listbox" aria-expanded="${movieMenuOpen === name}">${esc(text)}</button>`;
   const pages = meta.pages > 1
     ? `<div class="movie-dock-pages">
       <button type="button" class="movie-dock-page" data-movie-page="prev" aria-label="Previous page"${meta.page <= 1 ? ' disabled' : ''}>\u2039</button>
@@ -820,21 +823,20 @@ function movieDock(view, genres, decades, countries, meta) {
       <button type="button" class="movie-dock-page" data-movie-page="next" aria-label="Next page"${meta.page >= meta.pages ? ' disabled' : ''}>\u203a</button>
     </div>` : '';
   return `<div class="movie-dock" data-movie-dock>
-    <div class="movie-menu lg" data-movie-sheet role="group" aria-label="Filter movies"${movieMenuOpen ? '' : ' hidden'}><div class="movie-menu-scroll">
-      ${movieChoice('sort', 'Sort', MOVIE_SORTS, view.sort)}
+    <div class="movie-menu lg" data-movie-sheet role="group" aria-label="Choose"${movieMenuOpen ? '' : ' hidden'}><div class="movie-menu-scroll">
       ${movieChoice('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
       ${movieChoice('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
       ${movieChoice('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
-      <div class="movie-menu-group"><div class="movie-menu-options">
-        <button type="button" class="movie-menu-opt${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
-        ${meta.flow ? '' : '<button type="button" class="movie-menu-opt" data-galaxy-reshuffle>Shuffle ring</button>'}
-        ${active ? '<button type="button" class="movie-menu-opt movie-menu-reset" data-movie-reset>Reset</button>' : ''}
-      </div></div>
     </div></div>
-    <div class="movie-dock-row">
-      <button type="button" class="movie-filter lg${active ? ' on' : ''}" data-movie-menu aria-haspopup="true" aria-expanded="${movieMenuOpen}">Filters</button>
-      ${pages}
+    <div class="movie-bar lg" role="group" aria-label="Filter movies">
+      ${chip('genre', view.genre || 'All genres')}
+      ${chip('decade', view.decade ? view.decade + 's' : 'All decades')}
+      ${chip('country', view.country || 'All countries')}
+      <button type="button" class="movie-chip${view.only4k ? ' open' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
+      ${meta.flow ? '' : '<button type="button" class="movie-chip" data-galaxy-reshuffle>Shuffle ring</button>'}
+      ${active ? '<button type="button" class="movie-chip movie-chip-reset" data-movie-reset>Reset</button>' : ''}
     </div>
+    ${pages}
   </div>`;
 }
 function startMovieGalaxy(picked) {
@@ -1495,7 +1497,7 @@ let lastRoute = '';
 const savedScroll = new Map();
 function render() {
   stopMovieGalaxy();
-  if (routeInfo().name !== 'movies') movieMenuOpen = false;
+  if (routeInfo().name !== 'movies') movieMenuOpen = '';
   closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
     let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
@@ -1780,13 +1782,15 @@ document.addEventListener('click', e => {
   if (pick) {
     const name = pick.dataset.moviePick;
     const value = pick.dataset.movieValue ?? '';
-    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, '[data-movie-menu]');
+    movieMenuOpen = '';                                   // one choice per list: choosing closes it
+    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, `[data-movie-panel="${name}"]`); else syncMovieMenu();
     return;
   }
-  if (t.closest('[data-movie-menu]')) { movieMenuOpen = !movieMenuOpen; syncMovieMenu(); return; }
-  if (movieMenuOpen && !t.closest('[data-movie-dock]')) { movieMenuOpen = false; syncMovieMenu(); }
-  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-menu]'); return; }
-  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-menu]'); return; }
+  const dockPanel = t.closest('[data-movie-panel]');
+  if (dockPanel) { const n = dockPanel.dataset.moviePanel; movieMenuOpen = movieMenuOpen === n ? '' : n; syncMovieMenu(); return; }
+  if (movieMenuOpen && !t.closest('[data-movie-dock]')) { movieMenuOpen = ''; syncMovieMenu(); }
+  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
+  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-panel]'); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
@@ -1811,7 +1815,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '/' && $('#search').hidden && $('#player').hidden && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); return; }
   if (e.key !== 'Escape') return;
   if (closeTrailer()) return;
-  if (movieMenuOpen) { movieMenuOpen = false; syncMovieMenu(); return; }
+  if (movieMenuOpen) { movieMenuOpen = ''; syncMovieMenu(); return; }
   if (!$('#player').hidden && !document.fullscreenElement) closePlayer();
   else if (!$('#search').hidden) closeSearch();
   else if (!$('#setup').hidden) $('#setup').hidden = true;
