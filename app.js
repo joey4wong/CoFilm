@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=125';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=125';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=126';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=126';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -1561,7 +1561,9 @@ function render() {
   // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
   const tinted = r.name === 'detail' || r.name === 'home' || r.name === 'person', rootEl = document.documentElement;
   rootEl.classList.toggle('film-tint', tinted);
-  if (tinted !== (rootEl.dataset.themeLock === 'dark')) { if (tinted) rootEl.dataset.themeLock = 'dark'; else delete rootEl.dataset.themeLock; window.cofilmRefreshTheme?.(); }
+  const darkLock = tinted || r.name === 'movies';   // the Movies wall is always the textured black look too
+  rootEl.classList.toggle('movies-dark', r.name === 'movies');
+  if (darkLock !== (rootEl.dataset.themeLock === 'dark')) { if (darkLock) rootEl.dataset.themeLock = 'dark'; else delete rootEl.dataset.themeLock; window.cofilmRefreshTheme?.(); }
   if (keepScroll && $('.cast')) $('.cast').dataset.restoreIndex = String(castIndex);
   if (railIndex) document.querySelectorAll(railSections).forEach(s => { s.querySelector('.scroller').dataset.railRestoreIndex = String(railIndex.get(s.dataset.rowKey) || 0); });
   document.querySelectorAll('#nav a').forEach(a => { const active = a.dataset.route === (r.name === 'detail' ? '' : r.name); a.classList.toggle('on', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });

@@ -556,3 +556,14 @@ a.person:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:4p
 .search-open :is(#ambient,#view,#nav){visibility:hidden!important}
 .search-open #search::before{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:#0b0b0e!important}
 [data-theme="light"].search-open #search::before{background:#f4f4f6!important}
+
+/* Movies wall: a textured black (soft top light, vignette, fine grain) so the glass bar has something to refract. */
+html.movies-dark{background-color:#0b0b0d;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.07'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse 80% 55% at 50% 0%,rgba(78,82,96,.34),transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%,rgba(60,64,78,.28),transparent 72%),
+    radial-gradient(ellipse 120% 100% at 50% 50%,transparent 55%,rgba(0,0,0,.55) 100%);
+  background-attachment:fixed}
+html.movies-dark body{background:transparent}
+html.movies-dark .movie-ind.lg{background:rgba(255,255,255,.14)!important}
