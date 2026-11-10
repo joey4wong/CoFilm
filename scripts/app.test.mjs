@@ -96,7 +96,7 @@ test('modifier combinations never reach the player, and are never cancelled eith
 
 test('Genres lives in the Movies toolbar; the nav has no Genres tab and old links are redirected',()=>{
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.doesNotMatch(html,/data-route="genres"/);assert.match(source,/select\('genre', 'Genre'/);
+  assert.doesNotMatch(html,/data-route="genres"/);assert.match(source,/movieDockPanel\('genre', 'Genre'/);
   assert.match(source,/startsWith\('#\/genres'\)/);assert.match(source,/history\.replaceState\(null, '', location\.pathname \+ location\.search \+ '#\/movies'\)/);
   assert.doesNotMatch(source,/function viewGenres/);
 });
@@ -171,7 +171,7 @@ test('trailer opens in a window with a safe YouTube embed, and closing removes i
 });
 test('trailer wiring: Cmd/Ctrl-click keeps YouTube, Escape and navigation close it',()=>{
   assert.match(source,/data-trailer="\$\{esc\(tr\.key\)\}"/);assert.match(source,/!e\.metaKey && !e\.ctrlKey && !e\.shiftKey && !e\.altKey && e\.button === 0/);
-  assert.match(source,/if \(e\.key !== 'Escape'\) return;\n  if \(closeTrailer\(\)\) return;/);assert.match(source,/function render\(\) \{\n  closeTrailer\(\);/);
+  assert.match(source,/if \(e\.key !== 'Escape'\) return;\n  if \(closeTrailer\(\)\) return;/);assert.match(source,/function render\(\) \{[\s\S]*?closeTrailer\(\);/);
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="trailer" class="trailer-modal" role="dialog" aria-modal="true"/);
 });
 test('home and film pages take the film colours like the reference: one blurred layer, long fade, no solid bottom',()=>{
@@ -277,7 +277,7 @@ test('walls are fetched only for phones held upright, cached 30 days, and cleare
   assert.match(source,/if \(!key \|\| !phoneWallMedia\(\)\) return;/);
   assert.match(source,/include_image_language=null/);
   assert.match(source,/tmdbt\|tmdbw\):/);
-  assert.match(source,/ensureArtwork\(\); applyWalls\(\); ensureWalls\(\);/);
+  assert.match(source,/ensureArtwork\(\);\s*applyWalls\(\);\s*ensureWalls\(\);/);
 });
 test('artwork that is not landscape is flagged and shown whole on phones; landscape stays untouched',()=>{
   const els=[],mk=()=>{const cls=new Set();return{dataset:{art:JSON.stringify(['wide.jpg'])},style:{backgroundImage:'url("wide.jpg")'},classList:{add:c=>cls.add(c),remove:c=>cls.delete(c),toggle:(c,on)=>on?cls.add(c):cls.delete(c)},cls}};
@@ -299,7 +299,7 @@ test('a select is never focused from code on touch screens (iPhone opens its pic
   let focused=0;const sel={tagName:'SELECT',focus:()=>focused++},btn={tagName:'BUTTON',focus:()=>focused+=10};
   const mk=(el,touch)=>fnMany(['keepFocus'],{$:()=>el,window:{matchMedia:()=>({matches:touch})}}).keepFocus;
   mk(sel,true)('x');assert.equal(focused,0);mk(sel,false)('x');assert.equal(focused,1);mk(btn,true)('x');assert.equal(focused,11);
-  assert.match(source,/LS\.del\('view:movies'\); render\(\); keepFocus\('\[data-movie-view="sort"\]'\)/);
+  assert.match(source,/LS\.del\('view:movies'\); render\(\); keepFocus\('\[data-movie-dock\]'\)/);
 });
 
 test('iPhone fullscreen keeps the film upright and inside the visible screen',()=>{
@@ -341,4 +341,10 @@ test('searchHtml: all films newest first when empty, filtered and counted when t
   const ctx={state:{items},fold:s=>String(s).toLowerCase(),searchText:it=>it.key,title:it=>it.key,card:it=>'<c '+it.key+'>',yearOf:()=>'',parsed:{},};
   const {searchHtml}=fnMany(['searchHtml'],ctx);
   assert.equal(searchHtml(''),'<c b><c a>');assert.match(searchHtml('a'),/1 result<\/p><c a>/);assert.match(searchHtml('zzz'),/0 results<\/p><p class="empty">No results/);
+});
+
+test('Movies: touch screens always get the poster grid, the ring is for mouse screens; Reset only shows when a choice is active',()=>{
+  assert.match(source,/const touch = searchOnPage\(\);\s*const flow = touch \|\| moviesFlowActive\(view\);/);
+  assert.match(source,/const active = moviesFlowActive\(view\);/);
+  assert.doesNotMatch(source,/const active = flow;/);
 });

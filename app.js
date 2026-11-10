@@ -1,4 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson } from './lib/catalog.mjs?v=115';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=116';
+import { initMovieGalaxy } from './lib/galaxy.mjs?v=116';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -764,7 +765,12 @@ function viewHome() {
     </div>`;
 }
 // ---------- Movies page: sort and filter (remembered on this device) ----------
-const MOVIE_VIEW_DEFAULT = { sort: 'added', genre: '', decade: '', country: '', only4k: false };
+const MOVIE_VIEW_DEFAULT = { sort: 'added', genre: '', decade: '', country: '', only4k: false, page: 1, galaxySeed: 0 };
+let movieGalaxyCtrl = null;
+function stopMovieGalaxy() {
+  movieGalaxyCtrl?.stop();
+  movieGalaxyCtrl = null;
+}
 const movieView = () => ({ ...MOVIE_VIEW_DEFAULT, ...LS.get('view:movies', {}) });
 const countriesOf = it => String(it.meta?.country || '').split(',').map(s => s.trim()).filter(Boolean);
 function movieFacts(it) {
@@ -779,21 +785,72 @@ function keepFocus(selector) {
   el.focus();
 }
 function setMovieView(patch, focus) {
-  LS.set('view:movies', { ...movieView(), ...patch });
+  const prev = movieView();
+  const next = { ...prev, ...patch };
+  for (const k of ['genre', 'decade', 'country', 'only4k', 'sort']) {
+    if (k in patch && patch[k] !== prev[k]) next.page = 1;
+  }
+  LS.set('view:movies', next);
   render();
   keepFocus(focus);
 }
-function movieToolbar(view, genres, decades, countries) {
-  const select = (name, label, options, value) => `<label class="sel"><span>${label}</span><select data-movie-view="${name}" aria-label="${label}">${options.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
-  const active = view.genre || view.decade || view.country || view.only4k || view.sort !== 'added';
-  return `<div class="toolbar" role="group" aria-label="Sort and filter movies">
-    ${select('sort', 'Sort', MOVIE_SORTS, view.sort)}
-    ${select('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
-    ${select('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
-    ${select('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
-    <button type="button" class="chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
-    ${active ? '<button type="button" class="chip-toggle" data-movie-reset>Reset</button>' : ''}
+function dockLabel(options, value, fallback) {
+  return options.find(([v]) => String(v) === String(value))?.[1] || fallback;
+}
+function movieDockPanel(name, label, options, value) {
+  return `<div class="movie-dock-panel" data-movie-panel-body="${name}" hidden>
+    <p class="movie-dock-panel-title">${esc(label)}</p>
+    <div class="movie-dock-options" role="listbox" aria-label="${esc(label)}">
+      ${options.map(([v, t]) => `<button type="button" class="movie-dock-opt${String(v) === String(value) ? ' on' : ''}" role="option" aria-selected="${String(v) === String(value)}" data-movie-pick="${esc(name)}" data-movie-value="${esc(v)}">${esc(t)}</button>`).join('')}
+    </div>
   </div>`;
+}
+function movieDock(view, genres, decades, countries, meta) {
+  const flow = meta.flow;
+  const sortL = dockLabel(MOVIE_SORTS, view.sort, 'Sort');
+  const genreL = view.genre || 'All genres';
+  const decadeL = view.decade ? view.decade + 's' : 'All decades';
+  const countryL = view.country || 'All countries';
+  const active = moviesFlowActive(view);   // Reset only when something is actually chosen
+  const chips = flow
+    ? `<button type="button" class="movie-dock-chip" data-movie-panel="sort" aria-expanded="false">${esc(sortL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="genre" aria-expanded="false">${esc(genreL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="decade" aria-expanded="false">${esc(decadeL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="country" aria-expanded="false">${esc(countryL)}</button>
+      <button type="button" class="movie-dock-chip movie-dock-chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>`
+    : `<span class="movie-dock-hint">Drag the ring · click a poster for details</span>
+      <button type="button" class="movie-dock-chip" data-movie-panel="sort" aria-expanded="false">Browse: ${esc(sortL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="genre" aria-expanded="false">${esc(genreL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="decade" aria-expanded="false">${esc(decadeL)}</button>
+      <button type="button" class="movie-dock-chip" data-movie-panel="country" aria-expanded="false">${esc(countryL)}</button>
+      <button type="button" class="movie-dock-chip movie-dock-chip-toggle${view.only4k ? ' on' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
+      <button type="button" class="movie-dock-chip" data-galaxy-reshuffle>Shuffle ring</button>`;
+  const pages = meta.pages > 1
+    ? `<div class="movie-dock-pages">
+      <button type="button" class="movie-dock-page" data-movie-page="prev" aria-label="Previous page"${meta.page <= 1 ? ' disabled' : ''}>\u2039</button>
+      <span class="movie-dock-page-label">Page ${meta.page} of ${meta.pages}</span>
+      <button type="button" class="movie-dock-page" data-movie-page="next" aria-label="Next page"${meta.page >= meta.pages ? ' disabled' : ''}>\u203a</button>
+    </div>`
+    : flow && meta.total > 0 ? `<div class="movie-dock-pages"><span class="movie-dock-page-label">${meta.total} titles</span></div>` : '';
+  return `<div class="movie-dock lg" data-movie-dock role="group" aria-label="Sort and filter movies">
+    <div class="movie-dock-bar">${chips}${active ? '<button type="button" class="movie-dock-chip movie-dock-reset" data-movie-reset>Reset</button>' : ''}</div>
+  ${pages}
+    <div class="movie-dock-sheet" data-movie-sheet hidden>
+      ${movieDockPanel('sort', 'Sort', MOVIE_SORTS, view.sort)}
+      ${movieDockPanel('genre', 'Genre', [['', 'All genres'], ...genres.map(g => [g, g])], view.genre)}
+      ${movieDockPanel('decade', 'Decade', [['', 'All decades'], ...decades.map(d => [d, d + 's'])], view.decade)}
+      ${movieDockPanel('country', 'Country', [['', 'All countries'], ...countries.map(c => [c, c])], view.country)}
+    </div>
+  </div>`;
+}
+function startMovieGalaxy(picked) {
+  stopMovieGalaxy();
+  const viewport = document.getElementById('movieGalaxyViewport');
+  if (!viewport || !picked.length) return;
+  movieGalaxyCtrl = initMovieGalaxy(viewport, picked, {
+    posterUrl: it => posterOf(it) || it.files[0]?.thumb || '',
+    onOpen: key => { location.hash = '#/t/' + enc(key); },
+  });
 }
 function viewList(kind) {
   const all = state.items.filter(it => it.parsed.kind === kind);
@@ -812,11 +869,28 @@ function viewList(kind) {
   const saved = movieView();
   // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
   const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
-  const shown = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
-  const count = shown.length === all.length ? String(all.length) : `${shown.length} of ${all.length}`;
-  return `<div class="page"><h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>
-    ${movieToolbar(view, genres, decades, countries)}
-    <div class="grid">${shown.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">No movies match these filters.</p>'}</div></div>`;
+  const filtered = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
+  // Touch screens keep the ordinary poster grid: the 3D ring is mouse-driven (no finger drag, and it blocks scrolling).
+  const touch = searchOnPage();
+  const flow = touch || moviesFlowActive(view);
+  let viewResolved = view;
+  if (!flow && !view.galaxySeed) {   // (never on touch screens)
+    viewResolved = { ...view, galaxySeed: Date.now() };
+    LS.set('view:movies', viewResolved);
+  }
+  const slice = moviePageSlice(filtered, viewResolved.page);
+  const count = filtered.length === all.length ? String(all.length) : `${filtered.length} of ${all.length}`;
+  const pool = all.filter(it => posterOf(it) || it.files[0]?.thumb);
+  const galaxyPick = pickGalaxyMovies(pool, viewResolved.galaxySeed || 1);
+  const galaxyPickKeys = galaxyPick.map(it => it.key).join(',');
+  const flowBlock = `<div class="movies-flow"><div class="grid">${slice.items.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">No movies match these filters.</p>'}</div></div>`;
+  const galaxyBlock = `<div class="movies-galaxy" data-galaxy-keys="${esc(galaxyPickKeys)}">
+    <div class="galaxy-viewport" id="movieGalaxyViewport"><div class="galaxy-ring" id="movieGalaxyRing"></div></div>
+  </div>`;
+  return `<div class="page movies-page${flow ? ' movies-page--flow' : ' movies-page--galaxy'}">
+    <h1>Movies <span style="color:var(--dim);font-size:18px">${count}</span></h1>
+    <div class="movies-stage">${flow ? flowBlock : galaxyBlock}</div>
+    ${movieDock(viewResolved, genres, decades, countries, { flow, page: slice.page, pages: slice.pages, total: slice.total })}</div>`;
 }
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
@@ -1427,6 +1501,7 @@ function routeInfo() {
 let lastRoute = '';
 const savedScroll = new Map();
 function render() {
+  stopMovieGalaxy();
   closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
     let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
@@ -1464,7 +1539,22 @@ function render() {
   lastRoute = sig;
   if (!$('#search').hidden) renderSearch();
   if (r.name === 'detail') setTimeout(() => { if (routeInfo().name === 'detail') warmPlayer(); }, 1200);
-  requestAnimationFrame(() => { applyGlass(); setupCastControls(); setupRecommendationControls(); ensureArtwork(); applyWalls(); ensureWalls(); settleLightArtwork(); updateNavContrast(); });
+  requestAnimationFrame(() => {
+    applyGlass();
+    setupCastControls();
+    setupRecommendationControls();
+    ensureArtwork();
+    applyWalls();
+    ensureWalls();
+    settleLightArtwork();
+    updateNavContrast();
+    if (r.name === 'movies' && !searchOnPage() && !moviesFlowActive(movieView())) {
+      const box = document.querySelector('.movies-galaxy');
+      const keys = (box?.dataset.galaxyKeys || '').split(',').filter(Boolean);
+      const picked = keys.map(k => state.items.find(it => it.key === k)).filter(Boolean);
+      startMovieGalaxy(picked);
+    }
+  });
 }
 // Hero pictures are large. Decode each one BEFORE its cross-fade starts, so the animation never waits on a decode
 // (that wait showed up as roughly a second of 10-20 fps every time the slide changed).
@@ -1684,17 +1774,50 @@ document.addEventListener('click', e => {
   if (bio) { const id = bio.dataset.bioToggle; if (bioOpen.has(id)) bioOpen.delete(id); else bioOpen.add(id); render(); return; }
   const retry = t.closest('[data-person-retry]');
   if (retry) { personFailed.delete(retry.dataset.personRetry); render(); return; }
-  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
-  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-view="sort"]'); return; }
+  if (t.closest('[data-galaxy-reshuffle]')) { setMovieView({ galaxySeed: Date.now() }); return; }
+  const pageBtn = t.closest('[data-movie-page]');
+  if (pageBtn && !pageBtn.disabled) {
+    const v = movieView();
+    const dir = pageBtn.dataset.moviePage === 'next' ? 1 : -1;
+    setMovieView({ page: Math.max(1, (v.page || 1) + dir) });
+    return;
+  }
+  const pick = t.closest('[data-movie-pick]');
+  if (pick) {
+    const name = pick.dataset.moviePick;
+    const value = pick.dataset.movieValue ?? '';
+    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, '[data-movie-dock]');
+    return;
+  }
+  const dockPanel = t.closest('[data-movie-panel]');
+  if (dockPanel) {
+    const dock = t.closest('[data-movie-dock]');
+    const name = dockPanel.dataset.moviePanel;
+    const sheet = dock?.querySelector('[data-movie-sheet]');
+    const body = dock?.querySelector(`[data-movie-panel-body="${name}"]`);
+  const open = dockPanel.getAttribute('aria-expanded') === 'true';
+    dock?.querySelectorAll('[data-movie-panel]').forEach(b => { b.setAttribute('aria-expanded', 'false'); });
+    dock?.querySelectorAll('[data-movie-panel-body]').forEach(p => { p.hidden = true; });
+    if (!open && sheet && body) {
+      dockPanel.setAttribute('aria-expanded', 'true');
+      sheet.hidden = false;
+      body.hidden = false;
+    } else if (sheet) sheet.hidden = true;
+    return;
+  }
+  if (!t.closest('[data-movie-dock]') && document.querySelector('[data-movie-dock] [data-movie-sheet]:not([hidden])')) {
+    const dock = document.querySelector('[data-movie-dock]');
+    dock?.querySelector('[data-movie-sheet]')?.setAttribute('hidden', '');
+    dock?.querySelectorAll('[data-movie-panel]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    dock?.querySelectorAll('[data-movie-panel-body]').forEach(p => { p.hidden = true; });
+  }
+  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-dock]'); return; }
+  if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-dock]'); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }
 });
 $('#pclose').onclick = () => closePlayer();
 for (const type of ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'focusin']) $('#player').addEventListener(type, () => wakePlayerBar(), { passive: true });
-document.addEventListener('change', e => {
-  const s = e.target.closest?.('select[data-movie-view]');
-  if (s) setMovieView({ [s.dataset.movieView]: s.value }, 'select[data-movie-view="' + s.dataset.movieView + '"]');
-});
 // Cmd/Ctrl/Alt combinations belong to the browser (Cmd+F find, Cmd+K, ...). The player's own handler ignores modifiers,
 // so stop it from seeing them; the browser still gets the key because we never cancel it.
 document.addEventListener('keydown', e => {
