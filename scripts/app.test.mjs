@@ -342,3 +342,9 @@ test('searchHtml: all films newest first when empty, filtered and counted when t
   const {searchHtml}=fnMany(['searchHtml'],ctx);
   assert.equal(searchHtml(''),'<c b><c a>');assert.match(searchHtml('a'),/1 result<\/p><c a>/);assert.match(searchHtml('zzz'),/0 results<\/p><p class="empty">No results/);
 });
+
+test('Movies: touch screens always get the poster grid, the ring is for mouse screens; Reset only shows when a choice is active',()=>{
+  assert.match(source,/const touch = searchOnPage\(\);\s*const flow = touch \|\| moviesFlowActive\(view\);/);
+  assert.match(source,/const active = moviesFlowActive\(view\);/);
+  assert.doesNotMatch(source,/const active = flow;/);
+});

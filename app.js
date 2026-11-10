@@ -811,7 +811,7 @@ function movieDock(view, genres, decades, countries, meta) {
   const genreL = view.genre || 'All genres';
   const decadeL = view.decade ? view.decade + 's' : 'All decades';
   const countryL = view.country || 'All countries';
-  const active = flow;
+  const active = moviesFlowActive(view);   // Reset only when something is actually chosen
   const chips = flow
     ? `<button type="button" class="movie-dock-chip" data-movie-panel="sort" aria-expanded="false">${esc(sortL)}</button>
       <button type="button" class="movie-dock-chip" data-movie-panel="genre" aria-expanded="false">${esc(genreL)}</button>
@@ -870,9 +870,11 @@ function viewList(kind) {
   // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
   const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
   const filtered = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
-  const flow = moviesFlowActive(view);
+  // Touch screens keep the ordinary poster grid: the 3D ring is mouse-driven (no finger drag, and it blocks scrolling).
+  const touch = searchOnPage();
+  const flow = touch || moviesFlowActive(view);
   let viewResolved = view;
-  if (!flow && !view.galaxySeed) {
+  if (!flow && !view.galaxySeed) {   // (never on touch screens)
     viewResolved = { ...view, galaxySeed: Date.now() };
     LS.set('view:movies', viewResolved);
   }
@@ -1546,7 +1548,7 @@ function render() {
     ensureWalls();
     settleLightArtwork();
     updateNavContrast();
-    if (r.name === 'movies' && !moviesFlowActive(movieView())) {
+    if (r.name === 'movies' && !searchOnPage() && !moviesFlowActive(movieView())) {
       const box = document.querySelector('.movies-galaxy');
       const keys = (box?.dataset.galaxyKeys || '').split(',').filter(Boolean);
       const picked = keys.map(k => state.items.find(it => it.key === k)).filter(Boolean);
