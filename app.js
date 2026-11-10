@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=129';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=129';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=130';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=130';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -886,8 +886,7 @@ function viewList(kind) {
   const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
   const filtered = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
   // Touch screens keep the ordinary poster grid: the 3D ring is mouse-driven (no finger drag, and it blocks scrolling).
-  const touch = searchOnPage();
-  const flow = touch || moviesFlowActive(view);
+  const flow = moviesFlowActive(view);   // the ring now also runs on phones (finger drag)
   let viewResolved = view;
   if (!flow && !view.galaxySeed) {   // (never on touch screens)
     viewResolved = { ...view, galaxySeed: Date.now() };
@@ -906,6 +905,15 @@ function viewList(kind) {
     <div class="movies-stage">${flow ? flowBlock : galaxyBlock}</div>
     ${movieDock(viewResolved, genres, decades, countries, { flow, page: slice.page, pages: slice.pages, total: slice.total })}</div>`;
 }
+// Phone search page: the pill nav hides while the field is focused or holds text; it comes back when the field is empty and idle.
+function syncSearchNav() {
+  const q = document.getElementById('sq'), root = document.documentElement;
+  root.classList.toggle('search-typing', !!q && (document.activeElement === q || !!q.value));
+}
+document.addEventListener('focusin', e => { if (e.target.id === 'sq') syncSearchNav(); });
+document.addEventListener('focusout', e => { if (e.target.id === 'sq') setTimeout(syncSearchNav, 0); });
+document.addEventListener('input', e => { if (e.target.id === 'sq') syncSearchNav(); });
+window.addEventListener('hashchange', () => setTimeout(syncSearchNav, 0));
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
 const creditsPending = new Set();
@@ -1584,7 +1592,7 @@ function render() {
     ensureWalls();
     settleLightArtwork();
     updateNavContrast();
-    if (r.name === 'movies' && !searchOnPage() && !moviesFlowActive(movieView())) {
+    if (r.name === 'movies' && !moviesFlowActive(movieView())) {
       const box = document.querySelector('.movies-galaxy');
       const keys = (box?.dataset.galaxyKeys || '').split(',').filter(Boolean);
       const picked = keys.map(k => state.items.find(it => it.key === k)).filter(Boolean);
