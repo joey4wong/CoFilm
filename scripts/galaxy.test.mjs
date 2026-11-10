@@ -104,3 +104,19 @@ test('dragging never changes the ring angle; clicks still open, drags still do n
   assert.match(before, /rotateX\(-19\.5deg\) rotateZ\(24deg\)/);
   r.c.stop();
 });
+
+test('a finger spins the ring sideways and never changes its tilt',async()=>{
+  const s = await setup();
+  s.ctl.stop(); s.restartMovieGalaxy();
+  const r = s.make();
+  await sleep(160);
+  const now = performance.now();
+  pending(now - 100);
+  const before = r.r2.style.transform;
+  r.v2.fire('pointerdown', { pointerType: 'touch', clientX: 100, clientY: 300 });
+  r.v2.fire('pointermove', { pointerType: 'touch', clientX: 200, clientY: 380 });   // sideways and down
+  pending(now + 20);
+  s.win.fire('pointerup', { pointerType: 'touch' });
+  assert.equal(r.r2.style.transform, before);                                       // angle untouched
+  r.c.stop();
+});
