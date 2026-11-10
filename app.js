@@ -1135,7 +1135,6 @@ function lensFor(el, strong = false) {
   const bezel = strong ? Math.max(12, Math.min(R, 40)) : Math.max(12, Math.min(R, Math.min(W, H) * .42, 40));
   return glassFilter(W, H, Math.round(R), Math.round(bezel), Math.round(bezel * (strong ? 4.5 : 3.2)));
 }
-const desktopNav = matchMedia('(min-width:821px)');
 
 // ---------- Player controls: the same Liquid Glass inside movi-player's shadow DOM ----------
 // Control groups get the clear lens like the site's buttons; menus and panels get the lens plus a little more blur,
@@ -1203,7 +1202,7 @@ function applyGlass() {
   if (!GLASS_ON) return;
   const activeFilters = new Set();
   document.querySelectorAll('.lg').forEach(el => {
-    const id = lensFor(el, desktopNav.matches && (el.id === 'nav' || el.matches('#search .searchfield'))); if (!id) return;
+    const id = lensFor(el, el.id === 'nav' || el.matches('#search .searchfield')); if (!id) return;
     activeFilters.add(id);
     el.style.backdropFilter = `url(#${id}) blur(.6px) saturate(1.5) brightness(1.05)`;
   });
