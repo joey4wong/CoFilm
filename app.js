@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=130';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=130';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=131';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=131';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -908,12 +908,13 @@ function viewList(kind) {
 // Phone search page: the pill nav hides while the field is focused or holds text; it comes back when the field is empty and idle.
 function syncSearchNav() {
   const q = document.getElementById('sq'), root = document.documentElement;
-  root.classList.toggle('search-typing', !!q && (document.activeElement === q || !!q.value));
+  root.classList.toggle('search-typing', !!q && routeInfo().name === 'search' && !(q.value === '' && document.activeElement !== q && !root.classList.contains('search-fresh')));
 }
-document.addEventListener('focusin', e => { if (e.target.id === 'sq') syncSearchNav(); });
-document.addEventListener('focusout', e => { if (e.target.id === 'sq') setTimeout(syncSearchNav, 0); });
-document.addEventListener('input', e => { if (e.target.id === 'sq') syncSearchNav(); });
-window.addEventListener('hashchange', () => setTimeout(syncSearchNav, 0));
+// The pill nav is hidden as soon as the Search page opens; it returns once the field is emptied or left empty.
+document.addEventListener('focusin', e => { if (e.target.id === 'sq') { document.documentElement.classList.remove('search-fresh'); document.documentElement.classList.add('search-typing'); } });
+document.addEventListener('focusout', e => { if (e.target.id === 'sq' && !e.target.value) { document.documentElement.classList.remove('search-fresh', 'search-typing'); } });
+document.addEventListener('input', e => { if (e.target.id === 'sq') document.documentElement.classList.toggle('search-typing', !!e.target.value); });
+window.addEventListener('hashchange', () => { const on = routeInfo().name === 'search'; document.documentElement.classList.toggle('search-typing', on); document.documentElement.classList.toggle('search-fresh', on); });
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
 const creditsPending = new Set();

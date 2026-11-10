@@ -180,7 +180,7 @@ main{min-height:100vh}
 
 #nav .searchlink{display:inline-flex;align-items:center;gap:7px}
 #nav .searchlink svg{width:17px;height:17px}
-@media (max-width:820px){ #nav .searchlink span{display:none} #nav .searchlink{padding:8px 10px} }
+@media (max-width:820px){ #nav .searchlink svg{display:none} }
 .pill.trailer{text-decoration:none;gap:8px}.pill.trailer svg{width:22px;height:22px;fill:none}
 
 /* ---------- Responsive layout: centered max-width container + fluid sizes ---------- */
