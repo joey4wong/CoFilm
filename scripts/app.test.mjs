@@ -374,3 +374,9 @@ test('an open list is tinted for legibility and the ring recedes behind it',()=>
   assert.match(css,/\.movies-page\.menu-open \.movies-stage\{opacity:\.2\}/);
   assert.match(source,/movieMenuOpen \? ' menu-open' : ''/);assert.match(source,/classList\.toggle\('menu-open', !!movieMenuOpen\)/);
 });
+
+test('a reload always starts Movies from the ring: the saved view is dropped at load, not remembered across reloads',()=>{
+  assert.match(source,/const MOVIE_VIEW_DEFAULT = [^\n]*\n(\/\/[^\n]*\n)+LS\.del\('view:movies'\);/);
+  const i=source.indexOf("LS.del('view:movies');\nconst movieView"),j=source.indexOf('const movieView');
+  assert.ok(source.indexOf("LS.del('view:movies');")<j,'the saved view is cleared before the first read');
+});

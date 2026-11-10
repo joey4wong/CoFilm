@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=120';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=120';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=121';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=121';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -766,6 +766,9 @@ function viewHome() {
 }
 // ---------- Movies page: sort and filter (remembered on this device) ----------
 const MOVIE_VIEW_DEFAULT = { sort: 'added', genre: '', decade: '', country: '', only4k: false, page: 1, galaxySeed: 0 };
+// Every page load starts from the galaxy ring. A choice made earlier (including an old sort from before the sort control was
+// removed) used to be remembered across reloads and silently kept the page on the poster grid; now it lasts only for this visit.
+LS.del('view:movies');
 let movieGalaxyCtrl = null;
 function stopMovieGalaxy() {
   movieGalaxyCtrl?.stop();
