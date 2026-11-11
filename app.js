@@ -464,6 +464,7 @@ async function play(fileId, restart) {
   player = document.createElement('movi-player');
   player.setAttribute('controls', ''); player.setAttribute('crossorigin', 'anonymous');
   player.setAttribute('fallback', 'native'); player.setAttribute('persist', 'volume speed subtitlelang audiolang');
+  player.setAttribute('thumb', '');
   player.setAttribute('title', $('#ptitle').textContent);         // lock screen / Now Playing name
   keepFullscreenUpright(player);
   if (it.meta?.background) player.setAttribute('poster', it.meta.background);
@@ -1233,7 +1234,8 @@ function lensFor(el, strong = false) {
 const PLAYER_GLASS_CHROME = '.movi-play-pause,.movi-volume-container,.movi-time,.movi-controls-right,.movi-center-play-pause,.movi-top-controls .movi-btn';
 const PLAYER_GLASS_PANELS = '.movi-settings-menu,.movi-audio-track-menu,.movi-subtitle-track-menu,.movi-quality-menu,.movi-speed-menu,.movi-context-menu,.movi-osd-container,.movi-resume-dialog,.movi-shortcuts-panel,.movi-cues-panel';
 const PLAYER_GLASS_CSS = `
-:host{--movi-controls-group-bg:rgba(255,255,255,.1);--movi-glass-bg:rgba(16,16,20,.4);--movi-chrome-bg:rgba(16,16,20,.4);--movi-glass-border:transparent;--movi-chrome-border:transparent}
+:host{--movi-controls-group-bg:rgba(255,255,255,.1);--movi-glass-bg:rgba(16,16,20,.4);--movi-chrome-bg:rgba(16,16,20,.4);--movi-glass-border:transparent;--movi-chrome-border:transparent;--movi-preview-w:92px!important;--movi-preview-h:52px!important}
+.movi-thumbnail-img,.movi-thumbnail-tile,.movi-thumbnail-placeholder{width:var(--movi-preview-w,92px)!important;height:var(--movi-preview-h,52px)!important;max-height:72px!important;object-fit:contain}
 :is(${PLAYER_GLASS_CHROME}){background:rgba(255,255,255,.1)!important;border:0!important;
   -webkit-backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);backdrop-filter:blur(1.5px) saturate(1.7) brightness(1.04);
   box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10),inset 0 -12px 24px -14px rgba(0,0,0,.35),0 10px 34px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2)!important}
