@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=139';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=139';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=140';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=140';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -418,9 +418,25 @@ class ODSource {
 
 // ---------- player ----------
 // Keep the multi-megabyte player off the browsing path. Download only when PLAY/RESUME is pressed.
+// The CDN copy is the daily source; vendor/movi-player/<same version>/ is a byte-identical copy served by this site,
+// used when the CDN fails or stalls. element.js embeds its WASM, so that one file is the whole engine.
+const MOVI_VERSION = '0.4.1';
+const PLAYER_CDN = `https://cdn.jsdelivr.net/npm/movi-player@${MOVI_VERSION}/dist/element.js`;
+const PLAYER_LOCAL = new URL(`vendor/movi-player/${MOVI_VERSION}/element.js`, import.meta.url).href;
+const PLAYER_CDN_PATIENCE_MS = 12000;
 let playerLib = null;
+async function importPlayer() {
+  const cdn = import(PLAYER_CDN);
+  let timer;
+  const stalled = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('player CDN is slow')), PLAYER_CDN_PATIENCE_MS); });
+  try { return await Promise.race([cdn, stalled]); }
+  catch (e) {
+    console.warn('player CDN unavailable, using the copy hosted with this site', e);
+    return Promise.any([import(PLAYER_LOCAL), cdn]);             // a slow CDN may still win; either copy is identical
+  } finally { clearTimeout(timer); }
+}
 function loadPlayerLib() {
-  return playerLib ||= import('https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js').catch(e => { playerLib = null; throw e; });
+  return playerLib ||= importPlayer().catch(e => { playerLib = null; throw e; });
 }
 let player = null, saveTimer = 0, current = null;
 // Fetch the ~11 MB engine when a viewer shows intent (opens a film, touches PLAY), never at site startup.
