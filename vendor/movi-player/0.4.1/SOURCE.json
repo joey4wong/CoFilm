@@ -1,0 +1,9 @@
+{
+  "package": "movi-player",
+  "version": "0.4.1",
+  "license": "Apache-2.0",
+  "file": "element.js",
+  "bytes": 12191947,
+  "sha256": "0250d186acc001e3766d217f344016043f3d600d81e86fb2c46346dd8b7cd5d8",
+  "source": "https://cdn.jsdelivr.net/npm/movi-player@0.4.1/dist/element.js"
+}
