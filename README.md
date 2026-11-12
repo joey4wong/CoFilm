@@ -14,10 +14,10 @@ A static, browser-only OneDrive movie library. GitHub Pages serves native JavaSc
 The multi-megabyte Movi player is downloaded only after PLAY/RESUME, not during ordinary browsing. It loads from jsDelivr, pinned to one exact version; if the CDN fails or does not answer within 12 seconds, the byte-identical copy in `vendor/movi-player/<version>/` (served by this site, ~3.6 MB gzipped) is used instead. Cached titles appear before OneDrive revalidation; fresh metadata is not fetched or processed twice.
 
 ## Using the site
-- **Movies page**: sort by recently added, year, rating, title, country or 4K first; filter by genre, decade, country or 4K only (Genres is a filter here, not a separate page). The choice is remembered on this device.
+- **Movies page**: a shuffled poster ring; filter by genre, decade, country or 4K only (Genres is a filter here, not a separate page) to get a grid, newest first. The choice lasts for this visit.
 - **Detail page**: besides "More like this", rows for the same director and for shared leading cast, taken from this library only.
 - **Install as an app**: iPhone/iPad Safari, Share > Add to Home Screen. Android Chrome, menu > Install app. It opens full screen with the cat icon. The service worker caches nothing, so every release arrives immediately.
-- **Player keys**: Space pause/play, F fullscreen, M mute, Up/Down volume, Left/Right skip 10 seconds. Cmd/Ctrl/Alt combinations are left to the browser.
+- **Player keys**: Space pause/play, F fullscreen, M mute, Up/Down volume, Left/Right skip 10 seconds, Z/X subtitles 0.5 s earlier/later (with Shift 0.1 s; also the −/+ buttons at the top, remembered per file). Cmd/Ctrl/Alt combinations are left to the browser.
 
 ## Check changes
 Use Node.js 22+ and run `npm run check`. There are no npm dependencies to install. This checks syntax, local HTML assets and the automated tests. The same checks run on pushes and pull requests.
