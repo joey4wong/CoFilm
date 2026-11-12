@@ -7,7 +7,7 @@ const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 function fn(name,next,context) { const start=source.indexOf(name),end=source.indexOf(next,start); assert.ok(start>=0&&end>start); return vm.runInNewContext('('+source.slice(start,end).trim()+')',context); }
 function libraryFixture(entry) {
   const calls={renders:0,lookups:0},state={items:[]};
-  const context={state,LS:{get:()=>123},buildItems:()=>[{key:'movie:test|2000',parsed:{title:'Test'}}],cachedMetadata:()=>entry,render:()=>calls.renders++,findMeta:async()=>{calls.lookups++;return{id:'tt1'}},pool:async(arr,n,work)=>{for(const x of arr)await work(x)},scheduleRender:()=>{},applyErotic:()=>{}};
+  const context={state,LS:{get:()=>123},buildItems:()=>[{key:'movie:test|2000',parsed:{title:'Test'},files:[]}],cachedMetadata:()=>entry,render:()=>calls.renders++,findMeta:async()=>{calls.lookups++;return{id:'tt1'}},pool:async(arr,n,work)=>{for(const x of arr)await work(x)},scheduleRender:()=>{},applyErotic:()=>{}};
   return{calls,state,apply:fn('async function applyFiles(','async function load(',context)};
 }
 test('cached startup paints immediately without awaiting remote metadata',async()=>{const f=libraryFixture({entry:{ok:true,m:{id:'cached'}},fresh:false});await f.apply([],{refreshMetadata:false});assert.equal(f.calls.lookups,0);assert.equal(f.calls.renders,1);assert.equal(f.state.items[0].meta.id,'cached');});
@@ -79,7 +79,7 @@ test('rail positions are remembered for every recommendation row, not just the f
   assert.doesNotMatch(source,/id="related-list"/);
 });
 test('every detail row has its own id so several recommendation rows can coexist',()=>{
-  const {row}=fnMany(['row'],{esc:s=>String(s),card:()=>'<a class="card"></a>'});
+  const {row}=fnMany(['row','railArrows'],{esc:s=>String(s),card:()=>'<a class="card"></a>'});
   const a=row('More from A',[1],{advance:true,key:'director-a'}),b=row('More with B',[1],{advance:true,key:'cast-b'});
   assert.match(a,/id="related-director-a"/);assert.match(b,/id="related-cast-b"/);assert.match(a,/aria-controls="related-director-a"/);assert.equal(row('x',[],{advance:true}),'');
 });
@@ -196,7 +196,7 @@ function personPageFixture(over={}) {
   const store={},shown={bg:null};
   const ctx={LS:{get:k=>k==='tmdb:key'?(over.noKey?null:'key'):(store[k]??null)},personOf:id=>over.person??null,personFailed:new Set(over.failed||[]),bioOpen:new Set(over.open||[]),state:{items:over.items||[]},
     esc:s=>String(s),yearOf:it=>String(it.year||''),card:(it,o)=>'<card '+it.key+' '+o.caption+'>',bgOf:it=>'bg-'+it.key,setAmbient:u=>{shown.bg=u},castPlaceholder:n=>'<placeholder '+n+'>',
-    libraryMatches,lifeLine};
+    libraryMatches,lifeLine,tmdbKey:()=>over.noKey?null:'key',itemOf:k=>(over.items||[]).find(it=>it.key===k)};
   return{ctx,shown,view:fnMany(['viewPerson'],ctx).viewPerson};
 }
 test('person page: bio, library films with their role, and graceful empty states',()=>{

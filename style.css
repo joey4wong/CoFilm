@@ -92,12 +92,6 @@ main{min-height:100vh}
 .person .face{border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;color:rgba(255,255,255,.85);border:0;width:100%;height:auto;aspect-ratio:4/5;font-size:clamp(34px,4vw,56px);object-fit:cover;background-color:#222}
 .person .n{margin-top:10px;font-weight:500;font-size:15px}
 .person .r{font-size:12px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
-.eps{display:grid;gap:12px;padding:0 var(--pad)}
-.ep{display:flex;gap:18px;align-items:center;padding:12px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);cursor:pointer}
-.ep:hover{background:rgba(255,255,255,.1)}
-.ep img{aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#222;width:clamp(120px,14vw,200px);flex:none}
-.ep .t{font-weight:600}
-.ep .m{font-size:13px;color:var(--muted)}
 /* overlays */
 .overlay{position:fixed;inset:0;z-index:60;overflow:auto;background:none;-webkit-backdrop-filter:none;backdrop-filter:none}
 .overlay[hidden],#toast[hidden]{display:none!important}
@@ -217,18 +211,19 @@ body{overflow-x:clip}
 /* The rectangular IMDb wordmark must not inherit square icon widths. */
 .rate .ic.imdbmark{width:auto}
 
-.ep > div{min-width:0;overflow-wrap:anywhere}
 
 #ptitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;text-shadow:0 1px 6px rgba(0,0,0,.6)}
 #pclose{flex:none}
+.psub{flex:none;display:inline-flex;align-items:center;height:44px;border-radius:999px;margin-left:auto;padding:0 4px;color:#fff;background:rgba(255,255,255,.1)}
+.psub button{width:36px;height:36px;border-radius:50%;color:inherit;font-size:20px;line-height:1;touch-action:manipulation}
+.psub button.psubv{width:auto;min-width:64px;padding:0 6px;font-size:13px;font-variant-numeric:tabular-nums}
+.psub button:focus-visible{outline:2px solid rgba(255,255,255,.9);outline-offset:1px}
 @media (max-width:360px){
   .infobox{padding:16px 12px}
   .infobox dl{column-gap:8px}
   .infobox dt{font-size:10.5px;letter-spacing:.05em}
   #nav a{padding-inline:9px;font-size:13px}
   .searchbox{padding-inline:16px}
-  .ep{gap:12px}
-  .ep img{width:96px}
 }
 @media (max-height:650px) and (min-width:821px){
   .hcontent{bottom:130px}
@@ -284,8 +279,6 @@ body{overflow-x:clip}
 [data-theme="light"] .cast-next:focus-visible,[data-theme="light"] .cast:focus-visible{outline-color:#1b202b}
 [data-theme="light"] .card .pos{background:var(--surface);box-shadow:0 4px 14px rgba(35,39,36,.12);outline-color:rgba(35,39,36,.09)}
 [data-theme="light"] .card:hover .pos{box-shadow:0 12px 28px rgba(23,27,36,.2)}
-[data-theme="light"] .ep{background:var(--surface);border-color:rgba(23,27,36,.08)}
-[data-theme="light"] .ep:hover{background:#f8f8f5}
 
 [data-theme="light"] .box input::placeholder{color:var(--dim)}
 [data-theme="light"] .box{background:var(--surface);border-color:rgba(23,27,36,.1);box-shadow:0 15px 50px rgba(23,27,36,.12)}
@@ -403,8 +396,6 @@ body{overflow-x:clip}
 .ploading::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.55)}
 .pspinner{position:relative;width:44px;height:44px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:pspin .9s linear infinite}
 @keyframes pspin{to{transform:rotate(360deg)}}
-.ep:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
-[data-theme="light"] .ep:focus-visible{outline-color:#1b202b}
 
 /* Round Liquid Glass close button (the shared .lg lens). The player is always dark, so it keeps the dark-theme glass
    in both themes: the selector below out-ranks the daytime .lg paint. */

@@ -1,19 +1,45 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, MOVIE_SORTS, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=141';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=141';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=142';
+import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=142';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
 const META = 'https://v3-cinemeta.strem.io';
 const LS = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  set(k, v) {
+    const s = JSON.stringify(v);
+    try { localStorage.setItem(k, s); } catch { try { pruneStorage(); localStorage.setItem(k, s); } catch {} }
+  },
   del(k) { localStorage.removeItem(k); },
 };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-
-const state = { items: [], genre: 'All', q: '', sort: 'added', listedAt: 0 };
+const state = { items: [], byKey: new Map(), byFile: new Map(), listedAt: 0 };
+const itemOf = k => state.byKey.get(k);
+const fileOf = id => state.byFile.get(id);
+// Re-fetchable caches of titles that left the library are dropped; a resume point only once it is 60 days old,
+// because a OneDrive subfolder that failed to list once must not cost anyone their place in a film.
+function pruneStorage() {
+  if (!state.items.length) return;
+  const meta = new Set(), ids = new Set(), walls = new Set();
+  for (const it of state.items) {
+    meta.add(metaKey(it.parsed));
+    if (it.meta?.id) ids.add(it.meta.id);
+    if (wallKey(it)) walls.add(wallKey(it));
+  }
+  const now = Date.now();
+  for (const k of Object.keys(localStorage)) {
+    const [p, rest] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
+    const drop = p === 'meta4' ? !meta.has(k)
+      : p === 'tmdbc' || p === 'tmdbt' ? !ids.has(rest)
+      : p === 'tmdbw' ? !walls.has(k)
+      : p === 'tmdbp' ? now - (LS.get(k)?.t || 0) > 7 * 864e5
+      : p === 'pos' || p === 'subd' ? !fileOf(rest) && now - (LS.get(k)?.at || 0) > 60 * 864e5
+      : false;
+    if (drop) localStorage.removeItem(k);
+  }
+}
 
 // ---------- OneDrive (anonymous share access) ----------
 function shareId(link) {
@@ -64,14 +90,22 @@ async function walkShare(link, query) {
   await walk(`${API}/shares/${shareId(link)}/driveitem/children?$top=500&${query}`, [], 0);
   return out;
 }
-// Building thumbnails makes OneDrive answer ~30% slower (measured median 1.07 s vs 0.73 s), and running both
-// requests at once makes them compete. So list first, show the library, then fetch the fallback stills.
-async function listAll(link) {
-  const files = await walkShare(link, '$select=' + FILE_FIELDS);
-  const thumbs = walkShare(link, '$expand=thumbnails($select=large,medium)&$select=id,file,folder,parentReference')
-    .then(list => new Map(list.map(f => [f.id, f.thumbnails?.[0]?.large?.url || f.thumbnails?.[0]?.medium?.url]).filter(x => x[1])));
-  thumbs.catch(() => {});
-  return { files, thumbs };
+// Building thumbnails makes OneDrive answer ~30% slower (measured median 1.07 s vs 0.73 s), so the listing has none.
+// A still is only needed where TMDB has no poster; those few are asked for one by one afterwards.
+const stillOf = f => f.thumbnails?.[0]?.large?.url || f.thumbnails?.[0]?.medium?.url;
+async function fetchStills(files) {
+  const raw = new Map(files.map(f => [f.id, f]));
+  const want = state.items.filter(it => !it.meta?.poster).map(it => raw.get(it.files[0].id)).filter(f => f && !stillOf(f) && f.parentReference?.driveId);
+  if (!want.length) return;
+  await pool(want, 4, async f => {
+    try {
+      const j = await odGet(`${API}/drives/${f.parentReference.driveId}/items/${f.id}?$select=id&$expand=thumbnails($select=large,medium)`);
+      const u = stillOf(j); if (!u) return;
+      f.thumbnails = [{ large: { url: u } }];
+      const x = fileOf(f.id)?.f; if (x) x.thumb = u;
+    } catch (e) { console.warn('still', e); }
+  });
+  saveFiles(files); scheduleRender();
 }
 
 // ---------- metadata (Cinemeta, no API key) ----------
@@ -91,23 +125,21 @@ async function fetchJson(url, tries = 4) {
   }
   throw last;
 }
+const tmdbKey = () => LS.get('tmdb:key');
+const tmdb = (path, key = tmdbKey()) => fetchJson(`${TMDB_API}${path}${path.includes('?') ? '&' : '?'}api_key=${key}`);
 // TMDB search: returns full TMDB details (with external_ids) of the best match, or null
 async function tmdbLookup(p, key, tmdbId) {
-  const tv = p.kind === 'series', type = tv ? 'tv' : 'movie';
-  const get = u => fetchJson(`${TMDB_API}${u}${u.includes('?') ? '&' : '?'}api_key=${key}`);
   if (!tmdbId) {
-    const yearParam = p.year ? (tv ? `&first_air_date_year=${p.year}` : `&year=${p.year}`) : '';
     const tries = [p.title]; if (/^the /i.test(p.title)) tries.push(p.title.slice(4));
     for (const t of tries) {
-      for (const yp of p.year ? [yearParam, ''] : ['']) {
-        const j = await get(`/search/${type}?query=${encodeURIComponent(t)}${yp}`);
+      for (const yp of p.year ? [`&year=${p.year}`, ''] : ['']) {
+        const j = await tmdb(`/search/movie?query=${encodeURIComponent(t)}${yp}`, key);
         let best = null, bs = 0;
         for (const x of j.results || []) {
-          const nm = x.title || x.name, on = x.original_title || x.original_name;
-          const y = parseInt((x.release_date || x.first_air_date || '0').slice(0, 4), 10);
+          const y = parseInt((x.release_date || '0').slice(0, 4), 10);
           const dy = p.year && y ? Math.abs(y - p.year) : 0;
           if (p.year && y && dy > 1) continue;
-          const s = Math.max(titleScore(nm, t), titleScore(on, t)) - dy * 0.3 + Math.min(x.popularity || 0, 50) / 100 + (x.poster_path ? 0.2 : 0);
+          const s = Math.max(titleScore(x.title, t), titleScore(x.original_title, t)) - dy * 0.3 + Math.min(x.popularity || 0, 50) / 100 + (x.poster_path ? 0.2 : 0);
           if (s > bs) { bs = s; best = x; }
         }
         if (best && bs >= 1) { tmdbId = best.id; break; }
@@ -116,7 +148,7 @@ async function tmdbLookup(p, key, tmdbId) {
     }
   }
   if (!tmdbId) return null;
-  return get(`/${type}/${tmdbId}?append_to_response=external_ids`);
+  return tmdb(`/movie/${tmdbId}?append_to_response=external_ids`, key);
 }
 const metaKey = p => 'meta4:' + p.kind + ':' + keyOf(p);
 // Older cache generations may hold wrong matches or dead poster URLs; drop them once.
@@ -132,13 +164,12 @@ async function findMeta(p) {
   try {
     const manual = LS.get('fix:' + p.kind + ':' + keyOf(p));
     let id = manual, td = null;
-    const key = LS.get('tmdb:key');
+    const key = tmdbKey();
     // 1) TMDB first (more accurate matching), unless a manual IMDb fix exists
     if (key) {
       try {
         if (manual) {
-          const f = await fetchJson(`${TMDB_API}/find/${manual}?api_key=${key}&external_source=imdb_id`);
-          const hit = (p.kind === 'series' ? f.tv_results : f.movie_results)?.[0];
+          const hit = (await tmdb(`/find/${manual}?external_source=imdb_id`, key)).movie_results?.[0];
           if (hit) td = await tmdbLookup(p, key, hit.id);
         } else td = await tmdbLookup(p, key);
         if (td && !id) id = td.external_ids?.imdb_id || td.imdb_id || null;
@@ -165,25 +196,23 @@ async function findMeta(p) {
         if (hit) { id = hit.imdb_id || hit.id; break; }
       }
     }
-    // 3) details: Cinemeta (IMDb rating, logo, episodes) merged with TMDB (synopsis, poster, backdrop)
+    // 3) details: Cinemeta (IMDb rating, logo) merged with TMDB (synopsis, poster, backdrop)
     let d = null;
     if (id) { try { d = (await fetchJson(`${META}/meta/${p.kind}/${id}.json`)).meta; } catch {} }
     if (d || td) {
       const T = td || {}, I = 'https://image.tmdb.org/t/p/';
-      const tYear = (T.release_date || T.first_air_date || '').slice(0, 4);
-      const tRun = T.runtime || T.episode_run_time?.[0];
+      const tGenres = (T.genres || []).map(g => g.name.replace('Science Fiction', 'Sci-Fi')).filter(Boolean);
       m = {
         id: id || ('tmdb' + T.id), tmdbId: T.id || d?.moviedb_id,
-        name: T.title || T.name || d?.name, year: tYear || d?.releaseInfo || d?.year,
+        name: T.title || d?.name, year: (T.release_date || '').slice(0, 4) || d?.releaseInfo || d?.year,
         desc: T.overview || d?.description,
         rating: d?.imdbRating || (T.vote_average ? T.vote_average.toFixed(1) : ''),
         imdbRating: d?.imdbRating || null, ratingSource: d?.imdbRating ? 'IMDb' : 'TMDB',
-        genres: (T.genres || []).map(g => g.name.replace('Science Fiction', 'Sci-Fi')).filter(Boolean).length ? T.genres.map(g => g.name.replace('Science Fiction', 'Sci-Fi')) : (d?.genres || d?.genre || []),
-        cast: d?.cast || [], director: d?.director || (T.created_by || []).map(c => c.name), runtime: tRun ? tRun + ' min' : d?.runtime,
+        genres: tGenres.length ? tGenres : (d?.genres || d?.genre || []),
+        cast: d?.cast || [], director: d?.director || [], runtime: T.runtime ? T.runtime + ' min' : d?.runtime,
         poster: T.poster_path ? I + 'w500' + T.poster_path : (id ? `https://images.metahub.space/poster/medium/${id}/img` : ''),
         background: T.backdrop_path ? I + 'w1280' + T.backdrop_path : (T.poster_path ? I + 'w1280' + T.poster_path : d?.background),
         country: (T.production_countries || []).map(c => c.name).join(', ') || d?.country,
-        videos: (d?.videos || []).map(v => ({ s: v.season, e: v.episode, name: v.name || v.title, thumb: v.thumbnail, desc: v.overview || v.description })),
         logo: d?.logo || (id ? `https://images.metahub.space/logo/medium/${id}/img` : ''), writer: d?.writer || [], awards: d?.awards,
       };
     }
@@ -195,8 +224,8 @@ async function findMeta(p) {
 // A poster that fails to load triggers one fresh metadata lookup per title per visit.
 const healedPosters = new Set();
 window.cofilmPosterFailed = img => {
-  const href = img.closest('.card')?.getAttribute('href');
-  const it = state.items.find(x => '#/t/' + enc(x.key) === href);
+  const href = img.closest('.card')?.getAttribute('href') || '';
+  let it; try { it = href.startsWith('#/t/') && itemOf(decodeURIComponent(href.slice(4))); } catch {}
   if (!it || !it.meta || healedPosters.has(it.key)) return;
   healedPosters.add(it.key);
   const was = it.meta.poster;
@@ -226,26 +255,27 @@ function buildItems(files) {
   const map = new Map();
   for (const v of vids) {
     const p = parseName(v.name);
+    if (p.kind === 'series') continue;                           // TV episodes in OneDrive are ignored
     const k = p.kind + ':' + keyOf(p);
     const file = { id: v.id, name: v.name, size: v.size, url: v['@content.downloadUrl'], added: Date.parse(v.lastModifiedDateTime || v.createdDateTime),
-      video: v.video, thumb: v.thumbnails?.[0]?.large?.url || v.thumbnails?.[0]?.medium?.url, subs: findSubs(v).map(s => ({ name: s.name, url: s['@content.downloadUrl'] })), s: p.season, e: p.episode };
+      video: v.video, thumb: stillOf(v), subs: findSubs(v).map(s => ({ name: s.name, url: s['@content.downloadUrl'] })) };
     if (!map.has(k)) map.set(k, { key: k, parsed: p, files: [], added: 0 });
     const it = map.get(k);
     it.files.push(file);
     it.added = Math.max(it.added, file.added);
   }
-  for (const it of map.values()) it.files.sort((a, b) => (a.s - b.s) || (a.e - b.e) || a.name.localeCompare(b.name));
+  for (const it of map.values()) it.files.sort((a, b) => a.name.localeCompare(b.name));
   return [...map.values()];
 }
 
 let loading = false;
 function saveFiles(files) {
-  const thumb = t => { const u = t?.large?.url || t?.medium?.url; return u ? [{ large: { url: u } }] : undefined; };
   LS.set('od:files', files.map(f => ({
     id: f.id, name: f.name, size: f.size, '@content.downloadUrl': f['@content.downloadUrl'],
     createdDateTime: f.createdDateTime, lastModifiedDateTime: f.lastModifiedDateTime,
     video: f.video && { width: f.video.width, height: f.video.height, fourCC: f.video.fourCC },
-    file: f.file && { mimeType: f.file.mimeType }, thumbnails: thumb(f.thumbnails?.[0]),
+    file: f.file && { mimeType: f.file.mimeType }, thumbnails: stillOf(f) ? [{ large: { url: stillOf(f) } }] : undefined,
+    parentReference: f.parentReference?.driveId ? { driveId: f.parentReference.driveId } : undefined,
   })));
   LS.set('od:listedAt', Date.now());
 }
@@ -253,7 +283,9 @@ async function applyFiles(files, { refreshMetadata = true } = {}) {
   const old = new Map(state.items.map(it => [it.key, it.meta]));
   const before = state.items.length;
   state.listedAt = LS.get('od:listedAt');
-  state.items = buildItems(files).filter(it => it.parsed.kind !== 'series');   // TV episodes in OneDrive are ignored
+  state.items = buildItems(files);
+  state.byKey = new Map(state.items.map(it => [it.key, it]));
+  state.byFile = new Map(state.items.flatMap(it => it.files.map(f => [f.id, { it, f }])));
   const pending = [];
   for (const it of state.items) {
     const { entry, fresh } = cachedMetadata(it.parsed);
@@ -277,17 +309,13 @@ async function load(force) {
     const cached = LS.get('od:files');
     if (cached && !state.items.length && !force) await applyFiles(cached, { refreshMetadata: false });
     else if (!cached) toast('Loading OneDrive…');
-    const { files, thumbs } = await listAll(link);
-    // Keep stills already known for these files until the fresh thumbnail request answers.
+    const files = await walkShare(link, '$select=' + FILE_FIELDS);
     const known = new Map((cached || []).map(f => [f.id, f.thumbnails]));
     for (const f of files) if (!f.thumbnails && known.get(f.id)) f.thumbnails = known.get(f.id);
     saveFiles(files);
-    thumbs.then(map => {
-      for (const f of files) { const u = map.get(f.id); if (u) f.thumbnails = [{ large: { url: u } }]; }
-      for (const it of state.items) for (const x of it.files) { const u = map.get(x.id); if (u) x.thumb = u; }
-      saveFiles(files); scheduleRender();
-    }).catch(e => console.warn('thumbnails', e));
     const added = await applyFiles(files);
+    fetchStills(files).catch(e => console.warn('stills', e));
+    pruneStorage();
     if (force || !cached) toast(`${state.items.length} titles`, 2500);
     else if (added > 0) toast(`${added} new title${added > 1 ? 's' : ''} added`, 4000);
   } catch (e) {
@@ -301,8 +329,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Da
 async function freshFile(f) {
   if (Date.now() - state.listedAt < 40 * 60e3) return f;
   await load(true);
-  for (const it of state.items) for (const x of it.files) if (x.id === f.id) return x;
-  return f;
+  return fileOf(f.id)?.f || f;
 }
 
 // ---------- subtitles ----------
@@ -447,11 +474,19 @@ function warmPlayer() {
 function savePosition() {
   if (player && current && player.duration && player.currentTime > 5) LS.set('pos:' + current.f.id, { t: player.currentTime, d: player.duration, at: Date.now() });
 }
-function nextEpisode(it, f) {
-  if (it.parsed.kind !== 'series') return null;
-  const i = it.files.indexOf(f);
-  return i >= 0 ? it.files[i + 1] || null : null;
+// Subtitle offset in seconds, remembered per file. Positive shows the subtitles later.
+const SUB_STEP = 0.5, SUB_FINE_STEP = 0.1;
+const subDelayOf = id => Number(LS.get('subd:' + id)?.d) || 0;
+const fmtSubDelay = d => (d > 0 ? '+' : d < 0 ? '\u2212' : '') + Math.abs(d).toFixed(1) + 's';
+function setSubDelay(d) {
+  if (!player || !current) return;
+  d = Math.max(-300, Math.min(300, Math.round(d * 10) / 10));
+  player.subtitleDelay = d;
+  if (d) LS.set('subd:' + current.f.id, { d, at: Date.now() }); else LS.del('subd:' + current.f.id);
+  $('#psubv').textContent = fmtSubDelay(d);
+  toast('Subtitles ' + fmtSubDelay(d), 900);
 }
+const shiftSubs = delta => setSubDelay((Number(player?.subtitleDelay) || 0) + delta);
 // iPhone Safari can only put a <video> into its own fullscreen player; movi paints to a canvas (that is how it plays
 // MKV/HEVC), so on iPhone it fills the screen with CSS instead and turns a landscape film 90° on its side.
 // Keep the picture upright and letterboxed, like iOS's own player; turning the phone gives a full landscape picture.
@@ -459,11 +494,13 @@ function keepFullscreenUpright(el) {
   el.updatePseudoFsRotation = function () { this.classList.remove('movi-pseudo-fs-rotate'); };
 }
 async function play(fileId, restart) {
-  let it, f;
-  for (const x of state.items) for (const y of x.files) if (y.id === fileId) { it = x; f = y; }
-  if (!f) return;
+  const hit = fileOf(fileId);
+  if (!hit) return;
+  const it = hit.it;
+  let f = hit.f;
   const lib = loadPlayerLib();                                   // download the engine while links refresh
-  $('#ptitle').textContent = title(it) + (it.parsed.kind === 'series' ? ` · S${f.s}E${f.e}` : '');
+  $('#ptitle').textContent = title(it);
+  $('#psubv').textContent = fmtSubDelay(subDelayOf(f.id));
   const wrap = $('#pwrap');
   wrap.innerHTML = `<div class="ploading"${it.meta?.background ? ` style="background-image:url('${esc(it.meta.background)}')"` : ''}><span class="pspinner" aria-label="Loading"></span></div>`;
   $('#player').hidden = false; document.body.style.overflow = 'hidden'; wakePlayerBar(); requestAnimationFrame(applyGlass);   // build the glass lens now that the button has a size
@@ -485,6 +522,7 @@ async function play(fileId, restart) {
   keepFullscreenUpright(player);
   if (it.meta?.background) player.setAttribute('poster', it.meta.background);
   if (startAt) player.setAttribute('startat', startAt.toFixed(2)); // open at the saved spot, not at 0 then seek
+  if (subDelayOf(f.id)) player.setAttribute('subtitledelay', String(subDelayOf(f.id)));
   for (const x of await subs) {
     if (!x) continue;
     const tr = document.createElement('track');
@@ -494,7 +532,6 @@ async function play(fileId, restart) {
     player.appendChild(tr);
   }
   if (current?.f !== f) return;
-  const fileRef = f;
   // Keep the artwork + spinner over the engine until the first frame plays (the canvas is black until then).
   const veil = wrap.querySelector('.ploading');
   const lift = () => { veil?.classList.add('done'); setTimeout(() => veil?.remove(), 400); };
@@ -503,7 +540,7 @@ async function play(fileId, restart) {
   setTimeout(lift, 20000);                                       // never leave it covering the player
   wrap.prepend(player);
   watchPlayerGlass(player);
-  const odSrc = new ODSource(f, async () => { await load(true); for (const x of state.items) for (const y of x.files) if (y.id === fileRef.id) return y.url; return null; }, { resumeAt: startAt });
+  const odSrc = new ODSource(f, async () => { await load(true); return fileOf(f.id)?.f.url || null; }, { resumeAt: startAt });
   player.addEventListener('playing', () => { odSrc.holdAhead = false; }, { once: true });
   player.addEventListener('playing', wakePlayerBar);          // start the hide countdown when playback (re)starts
   player.addEventListener('pause', wakePlayerBar);            // a paused video always shows the header
@@ -514,11 +551,7 @@ async function play(fileId, restart) {
   player.addEventListener('loadedmetadata', trySeek);
   player.addEventListener('durationchange', trySeek);
   player.addEventListener('pause', savePosition);
-  player.addEventListener('ended', () => {
-    LS.del('pos:' + f.id);
-    const next = nextEpisode(it, f);
-    if (next) play(next.id, true);                               // series: continue with the next episode
-  });
+  player.addEventListener('ended', () => LS.del('pos:' + f.id));
   clearInterval(saveTimer);
   saveTimer = setInterval(() => { if (player && !player.paused) savePosition(); }, 5000);
   setTimeout(() => { trySeek(); player?.play?.().catch(() => {}); }, 300);
@@ -629,7 +662,7 @@ const bgOf = it => it.meta?.background || posterOf(it) || (it.metaPending ? '' :
 // (textless) are used, so they never clash with the page's own title. Films without one keep the 16:9 layout.
 const WALL_MAX_AGE = 30 * 864e5;
 const phoneWallMedia = () => window.matchMedia?.('(max-width:820px) and (max-aspect-ratio:1/1)').matches;
-const wallKey = it => it?.meta?.tmdbId ? 'tmdbw:' + (it.parsed?.kind === 'series' ? 'tv' : 'movie') + ':' + it.meta.tmdbId : '';
+const wallKey = it => it?.meta?.tmdbId ? 'tmdbw:movie:' + it.meta.tmdbId : '';
 function wallOf(it) {
   const c = wallKey(it) && LS.get(wallKey(it));
   return c && typeof c.u === 'string' ? c.u : '';
@@ -641,25 +674,24 @@ function bestWall(images) {
 }
 const wallPending = new Set();
 async function ensureWalls() {
-  const key = LS.get('tmdb:key');
+  const key = tmdbKey();
   if (!key || !phoneWallMedia()) return;
   const wanted = [...new Set([...document.querySelectorAll('.bg[data-wall-key]')].map(el => el.dataset.wallKey))];
   for (const k of wanted) {
-    const it = state.items.find(x => x.key === k), ck = wallKey(it);
+    const it = itemOf(k), ck = wallKey(it);
     if (!ck || wallPending.has(ck)) continue;
     const c = LS.get(ck);
     if (c && Date.now() - (c.t || 0) < WALL_MAX_AGE) continue;
     wallPending.add(ck);
     try {
-      const res = await fetch(`${TMDB_API}/${it.parsed.kind === 'series' ? 'tv' : 'movie'}/${it.meta.tmdbId}/images?api_key=${key}&include_image_language=null`);
-      if (res.ok) LS.set(ck, { u: bestWall(await res.json()), t: Date.now() });   // '' = checked, none: keep the 16:9 layout
+      LS.set(ck, { u: bestWall(await tmdb(`/movie/${it.meta.tmdbId}/images?include_image_language=null`, key)), t: Date.now() });   // '' = checked, none: keep the 16:9 layout
     } catch {} finally { wallPending.delete(ck); }
   }
   applyWalls();
 }
 function applyWalls() {
   document.querySelectorAll('.bg[data-wall-key]').forEach(el => {
-    const it = state.items.find(x => x.key === el.dataset.wallKey), u = it && !el.classList.contains('art-tall') ? wallOf(it) : '';
+    const it = itemOf(el.dataset.wallKey), u = it && !el.classList.contains('art-tall') ? wallOf(it) : '';
     if (u) el.style.setProperty('--wall', `url("${u}")`); else el.style.removeProperty('--wall');
     el.classList.toggle('has-wall', !!u);
   });
@@ -692,22 +724,19 @@ const I = {
   play: '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg>',
   star: '<svg class="star" viewBox="0 0 24 24"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></svg>',
   cal: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
-  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
-  pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg>',
 };
-function metaRow(it, en = false) {
+function metaRow(it) {
   const m = it.meta || {}, g = (m.genres || [])[0];
   const q = quality(it.files[0]);
   const parts = [];
   if (m.rating) parts.push(`<span>${I.star}${esc(m.rating)}</span>`);
   if (yearOf(it)) parts.push(`<span>${I.cal}${esc(yearOf(it))}</span>`);
   if (g) parts.push(`<span>${esc(g)}</span>`);
-  if (it.parsed.kind === 'series') parts.push(`<span>${it.files.length} episodes</span>`);
   if (q) parts.push(`<span class="tag">${q}</span>`);
   return `<div class="metarow">${parts.join('<span class="dot"></span>')}</div>`;
 }
-function titleBlock(it, big) {
+function titleBlock(it) {
   const logo = logoOf(it);
   return logo
     ? `<img class="logo" src="${esc(logo)}" alt="${esc(title(it))}" onerror="this.outerHTML='<h1 class=&quot;tname&quot;>'+this.alt.replace(/</g,'&amp;lt;')+'</h1>'">`
@@ -727,12 +756,18 @@ function row(name, list, opts = {}) {
   if (!list.length) return '';
   if (opts.advance) {
     const key = opts.key || 'similar', railId = 'related-' + key.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return `<section class="row recommend-section" data-row-key="${esc(key)}" data-primary-genre="${esc(opts.genre || '')}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { related: true })).join('')}</div><button type="button" class="recommend-prev lg" data-recommend-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="recommend-next lg" data-recommend-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
+    return `<section class="row recommend-section" data-row-key="${esc(key)}" data-primary-genre="${esc(opts.genre || '')}"><h2>${esc(name)}</h2><div class="recommend-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { related: true })).join('')}</div>${railArrows('recommend', 'data-recommend-prev', 'data-recommend-next', 'in ' + esc(name), railId)}</div></section>`;
   }
-
   const railId = 'home-row-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div><button type="button" class="browse-prev lg" data-row-prev aria-label="Previous in ${esc(name)}" aria-controls="${railId}" title="Previous in ${esc(name)}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="browse-next lg" data-row-next aria-label="Next in ${esc(name)}" aria-controls="${railId}" title="Next in ${esc(name)}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>`;
-
+  return `<section class="row browse-section ${opts.wide ? 'wide' : ''}" data-row-key="${esc(name)}"><h2>${esc(name)}</h2><div class="browse-shell"><div class="scroller" id="${railId}" tabindex="0" role="region" aria-label="${esc(name)}">${list.map(it => card(it, { wide: opts.wide, caption: opts.caption?.(it) })).join('')}</div>${railArrows('browse', 'data-row-prev', 'data-row-next', 'in ' + esc(name), railId)}</div></section>`;
+}
+function railArrows(cls, prev, next, label, id) {
+  return `<button type="button" class="${cls}-prev lg" ${prev} aria-label="Previous ${label}" aria-controls="${id}" title="Previous ${label}" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" class="${cls}-next lg" ${next} aria-label="Next ${label}" aria-controls="${id}" title="Next ${label}"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button>`;
+}
+// The page picture of the hero and detail pages, with the artwork fallbacks and the phone wall.
+function artBg(it) {
+  const tall = artIsPoster(it), wall = !tall && wallOf(it);
+  return `<div class="bg${tall ? ' art-tall' : wall ? ' has-wall' : ''}" data-wall-key="${esc(it.key)}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')${wall ? `;--wall:url('${esc(wall)}')` : ''}"></div>`;
 }
 // Page colour layer. A small TMDB image is plenty once it is blurred; the new image is decoded BEFORE the fade starts,
 // then the two layers cross-fade by opacity only (no per-frame re-blur, no decode during the animation).
@@ -767,7 +802,7 @@ function viewHome() {
   const cw = items.map(it => ({ it, p: progressOf(it) })).filter(x => x.p && x.p.t > 30 && x.p.t < x.p.d - 120).sort((a, b) => b.p.at - a.p.at).map(x => x.it);
   const rated = items.filter(it => parseFloat(it.meta?.rating) >= 7).sort((a, b) => parseFloat(b.meta.rating) - parseFloat(a.meta.rating));
   const slides = hero.list.map((it, i) => `<div class="slide ${i === hero.idx ? 'on' : ''}" data-i="${i}" aria-hidden="${i !== hero.idx}" ${i === hero.idx ? '' : 'inert'}>
-      <div class="bg${artIsPoster(it) ? ' art-tall' : !artIsPoster(it) && wallOf(it) ? ' has-wall' : ''}" data-wall-key="${esc(it.key)}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')${!artIsPoster(it) && wallOf(it) ? `;--wall:url('${esc(wallOf(it))}')` : ''}"></div>
+      ${artBg(it)}
       <a class="hero-link" href="#/t/${enc(it.key)}" aria-label="View details for ${esc(title(it))}"></a>
       <div class="hcontent">${titleBlock(it)}${metaRow(it)}<p class="desc">${esc(it.meta?.desc || '')}</p>
         <div class="hbtns"><button class="pill" data-play-item="${esc(it.key)}">${I.play}${progressOf(it)?.t > 30 ? 'RESUME' : 'PLAY'}</button>
@@ -781,8 +816,8 @@ function viewHome() {
       ${!items.length ? '<p class="empty">No titles loaded yet.</p>' : ''}
     </div>`;
 }
-// ---------- Movies page: sort and filter (remembered on this device) ----------
-const MOVIE_VIEW_DEFAULT = { sort: 'added', genre: '', decade: '', country: '', only4k: false, page: 1, galaxySeed: 0 };
+// ---------- Movies page: filters (remembered for this visit) ----------
+const MOVIE_VIEW_DEFAULT = { genre: '', decade: '', country: '', only4k: false, page: 1, galaxySeed: 0 };
 // Every page load starts from the galaxy ring. A choice made earlier (including an old sort from before the sort control was
 // removed) used to be remembered across reloads and silently kept the page on the poster grid; now it lasts only for this visit.
 LS.del('view:movies');
@@ -807,7 +842,7 @@ function keepFocus(selector) {
 function setMovieView(patch, focus) {
   const prev = movieView();
   const next = { ...prev, ...patch };
-  for (const k of ['genre', 'decade', 'country', 'only4k', 'sort']) {
+  for (const k of ['genre', 'decade', 'country', 'only4k']) {
     if (k in patch && patch[k] !== prev[k]) next.page = 1;
   }
   LS.set('view:movies', next);
@@ -884,16 +919,11 @@ function startMovieGalaxy(picked) {
     onOpen: key => { location.hash = '#/t/' + enc(key); },
   });
 }
-function viewList(kind) {
-  const all = state.items.filter(it => it.parsed.kind === kind);
-  const newest = [...all].sort((a, b) => b.added - a.added)[0];
+function viewMovies() {
+  const all = state.items;
+  const newest = all.reduce((a, b) => (!a || b.added > a.added ? b : a), null);
   setAmbient(newest ? bgOf(newest) : '');
   const caption = it => [yearOf(it), it.meta?.runtime].filter(Boolean).join(' · ');
-  if (kind !== 'movie') {
-    const list = [...all].sort((a, b) => b.added - a.added);
-    return `<div class="page"><h1>Shows <span style="color:var(--dim);font-size:18px">${list.length}</span></h1>
-    <div class="grid">${list.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">Nothing here yet</p>'}</div></div>`;
-  }
   const facts = all.map(movieFacts);
   const genres = [...new Set(facts.flatMap(f => f.genres))].sort((x, y) => x.localeCompare(y));   // A to Z, no counts
   const decades = [...new Set(facts.map(f => decadeOf(f.year)).filter(Boolean))].sort((a, b) => b - a);
@@ -901,11 +931,10 @@ function viewList(kind) {
   const saved = movieView();
   // A saved choice may no longer exist after the library changes; ignore it instead of showing an empty page.
   const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
-  const filtered = sortMovieFacts(filterMovieFacts(facts, view), view.sort).map(f => f.it);
-  // Touch screens keep the ordinary poster grid: the 3D ring is mouse-driven (no finger drag, and it blocks scrolling).
-  const flow = moviesFlowActive(view);   // the ring now also runs on phones (finger drag)
+  const filtered = sortMovieFacts(filterMovieFacts(facts, view)).map(f => f.it);
+  const flow = moviesFlowActive(view);   // the ring also runs on phones (finger drag)
   let viewResolved = view;
-  if (!flow && !view.galaxySeed) {   // (never on touch screens)
+  if (!flow && !view.galaxySeed) {
     viewResolved = { ...view, galaxySeed: Date.now() };
     LS.set('view:movies', viewResolved);
   }
@@ -928,64 +957,48 @@ window.addEventListener('hashchange', () => setTimeout(syncSearchNav, 0));
 document.addEventListener('click', e => { if (e.target.closest?.('[data-search-back]')) { searchQuery = ''; if (history.length > 1) history.back(); else location.hash = '#/'; } });
 // ---------- TMDB credits (cast photos) ----------
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
-const creditsPending = new Set();
-function creditsOf(it) {
-  const id = it.meta?.id; if (!id) return null;
-  const c = LS.get('tmdbc:' + id);
-  if (c?.v === 3 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
-  const key = LS.get('tmdb:key');
-  if (key && !creditsPending.has(id)) {
-    creditsPending.add(id);
-    (async () => {
-      try {
-        let hit, f = { movie_results: [], tv_results: [] };
-        if (it.meta.tmdbId) { hit = { id: it.meta.tmdbId }; if (it.parsed.kind === 'series') f.tv_results = [hit]; else f.movie_results = [hit]; }
-        else { f = await (await fetch(`https://api.themoviedb.org/3/find/${id}?api_key=${key}&external_source=imdb_id`)).json(); hit = (f.movie_results || [])[0] || (f.tv_results || [])[0]; }
-        if (!hit) { LS.set('tmdbc:' + id, { v: 3, cast: [], crew: [], t: Date.now() }); return; }
-        const tv = !(f.movie_results || [])[0];
-        const res = await fetch(`https://api.themoviedb.org/3/${tv ? 'tv' : 'movie'}/${hit.id}/${tv ? 'aggregate_credits' : 'credits'}?api_key=${key}`);
-        if (!res.ok) throw new Error('Credits returned ' + res.status);
-        const cr = await res.json();
-        const cast = (cr.cast || []).map(p => ({ i: p.id, n: p.name, r: p.character || p.roles?.[0]?.character || '', p: p.profile_path }));
-        const crew = (cr.crew || []).filter(p => p.job === 'Director' || p.jobs?.some(j => j.job === 'Director')).map(p => ({ i: p.id, n: p.name, r: 'Director', p: p.profile_path }));
-        LS.set('tmdbc:' + id, { v: 3, cast, crew, t: Date.now() });
-        delete it._st; // New cast/roles must be searchable without a reload.
-        if (location.hash.includes(enc(it.key))) render();
-      } catch (e) { console.warn('tmdb', e); }
-      finally { creditsPending.delete(id); }
-    })();
+// A TMDB record cached in localStorage. An expired record is returned while it refreshes; one request at a time per record.
+const remotePending = new Set();
+function cachedRemote(ck, fresh, load, { done, fail } = {}) {
+  const c = LS.get(ck);
+  if (c && fresh(c)) return c;
+  if (load && tmdbKey() && !remotePending.has(ck)) {
+    remotePending.add(ck);
+    load().then(v => { LS.set(ck, { ...v, t: Date.now() }); done?.(); }, e => { console.warn(ck, e); fail?.(); })
+      .finally(() => remotePending.delete(ck));
   }
   return c || null;
 }
+const WEEK = 7 * 864e5;
+const onPage = it => () => { if (location.hash.includes(enc(it.key))) render(); };
+function creditsOf(it) {
+  const id = it.meta?.id; if (!id) return null;
+  return cachedRemote('tmdbc:' + id, c => c?.v === 3 && Date.now() - (c.t || 0) < WEEK, async () => {
+    const tmdbId = it.meta.tmdbId || (await tmdb(`/find/${id}?external_source=imdb_id`)).movie_results?.[0]?.id;
+    if (!tmdbId) return { v: 3, cast: [], crew: [] };
+    const cr = await tmdb(`/movie/${tmdbId}/credits`);
+    const cast = (cr.cast || []).map(p => ({ i: p.id, n: p.name, r: p.character || '', p: p.profile_path }));
+    const crew = (cr.crew || []).filter(p => p.job === 'Director').map(p => ({ i: p.id, n: p.name, r: 'Director', p: p.profile_path }));
+    return { v: 3, cast, crew };
+  }, { done: () => { delete it._st; onPage(it)(); } });          // new cast/roles must be searchable without a reload
+}
 
 // ---------- Person page: TMDB biography + this person's titles that are in the library ----------
-const personPending = new Set(), personFailed = new Set(), bioOpen = new Set();
+const personFailed = new Set(), bioOpen = new Set();
 function personOf(id) {
-  const c = LS.get('tmdbp:' + id);
-  if (c?.v === 1 && Date.now() - (c.t || 0) < 7 * 864e5) return c;
-  const key = LS.get('tmdb:key');
-  if (key && !personPending.has(id) && !personFailed.has(id)) {
-    personPending.add(id);
-    (async () => {
-      try {
-        const res = await fetch(`${TMDB_API}/person/${id}?api_key=${key}&append_to_response=combined_credits`);
-        if (!res.ok) throw new Error('Person returned ' + res.status);
-        LS.set('tmdbp:' + id, compactPerson(await res.json()));
-      } catch (e) { console.warn('person', e); personFailed.add(id); }
-      finally { personPending.delete(id); const r = routeInfo(); if (r.name === 'person' && r.arg === id) render(); }
-    })();
-  }
-  return c || null;                                              // an expired record is shown while it refreshes
+  const show = () => { const r = routeInfo(); if (r.name === 'person' && r.arg === id) render(); };
+  return cachedRemote('tmdbp:' + id, c => c?.v === 1 && Date.now() - (c.t || 0) < WEEK,
+    personFailed.has(id) ? null : async () => compactPerson(await tmdb(`/person/${id}?append_to_response=combined_credits`)),
+    { done: show, fail: () => { personFailed.add(id); show(); } });
 }
 function viewPerson(id) {
   const back = '<button type="button" class="back-link" data-back>\u2190 Back</button>';
   if (!/^\d+$/.test(id)) return `<div class="page person-page">${back}<p class="empty">Person not found.</p></div>`;
-  if (!LS.get('tmdb:key')) return `<div class="page person-page">${back}<p class="empty">Add a TMDB key in Settings to see cast details.</p></div>`;
+  if (!tmdbKey()) return `<div class="page person-page">${back}<p class="empty">Add a TMDB key in Settings to see cast details.</p></div>`;
   const p = personOf(id);
   if (!p) return `<div class="page person-page">${back}<p class="empty">${personFailed.has(id) ? 'Could not load this person. <button type="button" class="back-link" data-person-retry="' + esc(id) + '">Try again</button>' : 'Loading\u2026'}</p></div>`;
-  const items = state.items.map(it => ({ key: it.key, type: it.parsed.kind === 'series' ? 'tv' : 'movie', tmdbId: it.meta?.tmdbId }));
-  const byKey = new Map(state.items.map(it => [it.key, it]));
-  const mine = libraryMatches(items, p).map(x => ({ it: byKey.get(x.key), role: x.role })).sort((x, y) => (parseInt(yearOf(y.it), 10) || 0) - (parseInt(yearOf(x.it), 10) || 0));
+  const items = state.items.map(it => ({ key: it.key, type: 'movie', tmdbId: it.meta?.tmdbId }));
+  const mine = libraryMatches(items, p).map(x => ({ it: itemOf(x.key), role: x.role })).sort((x, y) => (parseInt(yearOf(y.it), 10) || 0) - (parseInt(yearOf(x.it), 10) || 0));
   setAmbient(mine[0] ? bgOf(mine[0].it) : '');
   const open = bioOpen.has(id), long = p.bio.length > 700;
   const bio = p.bio ? `<div class="person-bio${long && !open ? ' clamped' : ''}">${p.bio.split(/\n{2,}/).map(t => '<p>' + esc(t) + '</p>').join('')}</div>${long ? `<button type="button" class="bio-toggle" data-bio-toggle="${esc(id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read more'}</button>` : ''}` : '';
@@ -999,6 +1012,8 @@ function viewPerson(id) {
 
 // ---------- external ratings (IMDb / Rotten Tomatoes / Douban), fetched by a GitHub Action, encrypted ----------
 let ratingsKey = null;
+const ratingHashes = new Map(), ratingHashDone = new Map();
+function resetRatingsKey() { ratingsKey = null; ratingHashes.clear(); ratingHashDone.clear(); }
 async function rKey() {
   if (ratingsKey) return ratingsKey;
   const link = LS.get('od:link'); if (!link) return null;
@@ -1016,21 +1031,22 @@ async function loadRatings() {
     const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(f.iv) }, k.aes, b(f.data));
     state.ratings = JSON.parse(new TextDecoder().decode(plain)).items || {};
-    state.rHash = {};
     render();
     applyErotic();
   } catch (e) { console.warn('ratings', e); state.ratings ||= {}; scheduleRender(); }
 }
-async function ratingHash(id) {
-  const k = await rKey(); if (!k) return null;
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k.hmac, new TextEncoder().encode(id)));
-  return [...sig].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+function ratingHash(id) {
+  if (!ratingHashes.has(id)) ratingHashes.set(id, (async () => {
+    const k = await rKey(); if (!k) return null;
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k.hmac, new TextEncoder().encode(id)));
+    return [...sig].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  })().catch(() => null).then(h => { ratingHashDone.set(id, h); return h; }));
+  return ratingHashes.get(id);
 }
 function ratingsOf(it) {
   const id = it.meta?.id; if (!id || !/^tt/.test(id) || !state.ratings) return null;
-  if (!state.rHash) state.rHash = {};
-  if (!(id in state.rHash)) { state.rHash[id] = null; ratingHash(id).then(h => { state.rHash[id] = h; if (location.hash.includes(enc(it.key))) render(); }); return null; }
-  return state.rHash[id] ? state.ratings[state.rHash[id]] || null : null;
+  if (!ratingHashDone.has(id)) { if (!ratingHashes.has(id)) ratingHash(id).then(onPage(it)); return null; }
+  return state.ratings[ratingHashDone.get(id)] || null;
 }
 
 // ---------- Erotic genre: films flagged by the ratings job (Douban "erotic" genre or TMDB erotic/softcore tags)
@@ -1040,10 +1056,12 @@ async function applyErotic() {
   if (!state.ratings) return;
   if (!overrides) { try { overrides = await (await fetch('overrides.json?t=' + Date.now(), { cache: 'no-store' })).json(); } catch { overrides = {}; } }
   const add = new Set(overrides.erotic || []), remove = new Set(overrides.notErotic || []);
+  const films = state.items.filter(it => /^tt/.test(it.meta?.id || '')), ids = films.map(it => it.meta.id);
+  const hashes = await Promise.all(ids.map(ratingHash));
   let changed = false;
-  for (const it of state.items) {
-    const m = it.meta; if (!m || !/^tt/.test(m.id || '')) continue;
-    const h = await ratingHash(m.id);
+  for (const [i, it] of films.entries()) {
+    const m = it.meta, h = hashes[i];
+    if (m?.id !== ids[i]) continue;
     const ero = !remove.has(h) && (add.has(h) || !!state.ratings[h]?.ero);
     if (ero && !(m.genres.length === 1 && m.genres[0] === 'Erotic')) { it.meta = { ...m, origGenres: m.origGenres || m.genres, genres: ['Erotic'] }; changed = true; }
     if (!ero && m.origGenres) { it.meta = { ...m, genres: m.origGenres, origGenres: undefined }; changed = true; }
@@ -1090,27 +1108,15 @@ function ratingsHtml(it) {
 
 
 // ---------- Trailer (TMDB videos -> YouTube) ----------
-const trailerPending = new Set();
 function trailerOf(it) {
   const m = it.meta; if (!m?.id) return null;
-  const ck = 'tmdbt:' + m.id, c = LS.get(ck);
-  if (c && Date.now() - (c.t || 0) < 7 * 864e5) return c.key ? c : { none: true };
-  const key = LS.get('tmdb:key');
-  if (key && m.tmdbId && !trailerPending.has(ck)) {
-    trailerPending.add(ck);
-    (async () => {
-      let pick = null;
-      try {
-        const j = await (await fetch(`https://api.themoviedb.org/3/${it.parsed.kind === 'series' ? 'tv' : 'movie'}/${m.tmdbId}/videos?api_key=${key}`)).json();
-        const yt = (j.results || []).filter(v => v.site === 'YouTube');
-        const rank = v => (v.type === 'Trailer' ? 2 : v.type === 'Teaser' ? 1 : 0) * 10 + (v.official ? 5 : 0) + (v.iso_639_1 === 'en' ? 3 : 0);
-        pick = yt.filter(v => v.type === 'Trailer' || v.type === 'Teaser').sort((a, b) => rank(b) - rank(a) || String(b.published_at).localeCompare(String(a.published_at)))[0] || null;
-      } catch (e) { console.warn('trailer', e); return; }
-      LS.set(ck, { key: pick?.key || null, t: Date.now() });
-      if (location.hash.includes(enc(it.key))) render();
-    })();
-  }
-  return null;
+  return cachedRemote('tmdbt:' + m.id, c => Date.now() - (c.t || 0) < WEEK, m.tmdbId && (async () => {
+    const j = await tmdb(`/movie/${m.tmdbId}/videos`);
+    const rank = v => (v.type === 'Trailer' ? 2 : 1) * 10 + (v.official ? 5 : 0) + (v.iso_639_1 === 'en' ? 3 : 0);
+    const pick = (j.results || []).filter(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))
+      .sort((a, b) => rank(b) - rank(a) || String(b.published_at).localeCompare(String(a.published_at)))[0];
+    return { key: pick?.key || null };
+  }), { done: onPage(it) });
 }
 
 // A neutral portrait for missing TMDB photos, also used when an image fails to load.
@@ -1126,23 +1132,22 @@ document.addEventListener('error', e => {
 }, true);
 
 function viewDetail(key) {
-  const it = state.items.find(x => x.key === key);
+  const it = itemOf(key);
   if (!it) return '<div class="page"><p class="empty">Title not found.</p></div>';
-  const m = it.meta || {}, f = it.files[0], pr = progressOf(it), isS = it.parsed.kind === 'series';
+  const m = it.meta || {}, f = it.files[0], pr = progressOf(it);
   setAmbient(bgOf(it));
   const resume = pr && pr.t > 30 && pr.t < pr.d - 60;
   const infos = [
-    ['Type', isS ? 'Series' : 'Film'], ['Released', m.year || it.parsed.year], ['Runtime', fmtRuntime(m.runtime)], ['Genres', (m.genres || []).join(', ')],
+    ['Type', 'Film'], ['Released', m.year || it.parsed.year], ['Runtime', fmtRuntime(m.runtime)], ['Genres', (m.genres || []).join(', ')],
     ['Ratings', '__RATINGS__'], ['Director', (m.director || []).join(', ')], ['Cast', (m.cast || []).slice(0, 4).join(', ')], ['Country', m.country],
   ].filter(x => x[1]);
-  const epName = (s, e) => (m.videos || []).find(x => x.s === s && x.e === e) || {};
   const cr = creditsOf(it);
   const people = cr && (cr.cast.length || cr.crew.length)
     ? [...cr.crew, ...cr.cast]
     : [...(m.director || []).map(n => ({ n, r: 'Director' })), ...(m.cast || []).map(n => ({ n, r: '' }))];
   const primaryGenre = (m.genres || [])[0];
   const similar = primaryGenre ? state.items
-    .filter(x => x !== it && x.parsed.kind === it.parsed.kind && (!m.id || x.meta?.id !== m.id) && (x.meta?.genres || [])[0] === primaryGenre)
+    .filter(x => x !== it && (!m.id || x.meta?.id !== m.id) && (x.meta?.genres || [])[0] === primaryGenre)
     .map(x => {
       const shared = x.meta.genres.filter(g => m.genres.includes(g)).length;
       return { x, shared, overlap: shared / new Set([...m.genres, ...x.meta.genres]).size };
@@ -1171,20 +1176,18 @@ function viewDetail(key) {
     }
   }
   const subsTxt = f.subs.length ? 'Subtitles: ' + f.subs.map(s => s.name.split('.').pop().toUpperCase()).join('/') : '';
-  return `<div class="detail"><div class="bg${artIsPoster(it) ? ' art-tall' : !artIsPoster(it) && wallOf(it) ? ' has-wall' : ''}" data-wall-key="${esc(it.key)}" data-art="${esc(JSON.stringify(artCandidates(it)))}" style="background-image:url('${esc(bgOf(it))}')${!artIsPoster(it) && wallOf(it) ? `;--wall:url('${esc(wallOf(it))}')` : ''}"></div>
-    <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it, true)}
+  return `<div class="detail">${artBg(it)}
+    <div class="dtop"><div class="dleft">${titleBlock(it)}${metaRow(it)}
       <p class="desc">${esc(m.desc || 'No details found for this title. Use the edit button below to fix the match.')}</p>
       <div class="hbtns">
-        ${isS ? `<button class="pill" data-play="${esc((pr?.f || f).id)}">${I.play}${pr ? 'RESUME S' + pr.f.s + 'E' + pr.f.e : 'PLAY'}</button>`
-              : `<button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>`}
-        ${resume && !isS ? `<button class="glass-action restart lg" data-play="${esc(f.id)}" data-restart aria-label="Start over" title="Start over">${I.restart}</button>` : ''}
+        <button class="pill" data-play="${esc(f.id)}">${I.play}${resume ? 'RESUME ' + fmtTime(pr.t) : 'PLAY'}</button>
+        ${resume ? `<button class="glass-action restart lg" data-play="${esc(f.id)}" data-restart aria-label="Start over" title="Start over">${I.restart}</button>` : ''}
         ${(() => { const tr = trailerOf(it); return tr?.key ? `<a class="glass-action trailer lg" href="https://www.youtube.com/watch?v=${esc(tr.key)}" target="_blank" rel="noopener" data-trailer="${esc(tr.key)}" data-trailer-title="${esc(title(it))}">${I.yt}TRAILER</a>` : ''; })()}
       </div>
       <div class="fileinfo">${it.files.length === 1 ? `${esc(f.name)}<br>${[fmtSize(f.size), f.video?.width ? f.video.width + '×' + f.video.height : '', f.video?.fourCC, subsTxt].filter(Boolean).map(esc).join(' · ')}` : `${it.files.length} files · ${fmtSize(it.files.reduce((a, x) => a + x.size, 0))}`}</div>
     </div>
     <div class="infobox lg"><dl>${infos.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === '__RATINGS__' ? ratingsHtml(it) : esc(v)}</dd>`).join('')}</dl></div></div>
-    ${isS ? `<section class="row"><h2>Episodes</h2><div class="eps">${it.files.map(x => { const e = epName(x.s, x.e), p = LS.get('pos:' + x.id); return `<div class="ep" role="button" tabindex="0" data-play="${esc(x.id)}" aria-label="${esc('Play episode ' + x.e + (e.name ? ': ' + e.name : ''))}"><img loading="lazy" src="${esc(e.thumb || x.thumb || '')}" alt="" onerror="this.style.visibility='hidden'"><div><div class="t">${x.e}. ${esc(e.name || 'Episode ' + x.e)}</div><div class="m">S${x.s}E${String(x.e).padStart(2, '0')} · ${fmtSize(x.size)}${p && p.d ? ' · Watched to ' + fmtTime(p.t) : ''}</div></div></div>`; }).join('')}</div></section>` : ''}
-    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => { const inner = `${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div>`; return p.i ? `<a class="person" href="#/person/${p.i}" aria-label="${esc(p.n + (p.r ? ', ' + p.r : ''))}">${inner}</a>` : `<div class="person">${inner}</div>`; }).join('')}</div><button class="cast-prev lg" data-cast-scroll="-1" aria-label="Previous cast" aria-controls="cast-list" title="Previous cast" disabled><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button><button class="cast-next lg" data-cast-scroll="1" aria-label="Next cast" aria-controls="cast-list" title="Next cast"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button></div></section>` : ''}
+    ${people.length ? `<section class="row cast-section"><h2>Cast</h2><div class="cast-shell"><div class="cast" id="cast-list" tabindex="0" role="region" aria-label="Cast and crew">${people.map(p => { const inner = `${face(p)}<div class="n">${esc(p.n)}</div><div class="r">${esc(p.r)}</div>`; return p.i ? `<a class="person" href="#/person/${p.i}" aria-label="${esc(p.n + (p.r ? ', ' + p.r : ''))}">${inner}</a>` : `<div class="person">${inner}</div>`; }).join('')}</div>${railArrows('cast', 'data-cast-scroll="-1"', 'data-cast-scroll="1"', 'cast', 'cast-list')}</div></section>` : ''}
     ${peopleRows.map(r => row(r.name, r.list, { advance: true, key: r.key })).join('')}
     ${row('More like this', similar, { advance: true, genre: primaryGenre, key: 'similar' })}
     <div style="height:40px"></div></div>`;
@@ -1342,9 +1345,7 @@ function applyGlassInd() {   // re-fit only the sliding drop's lens to its new s
   if (id) ind.style.backdropFilter = `url(#${id}) blur(.3px) saturate(1.4) brightness(1.06)`;
 }
 window.addEventListener('cofilmthemechange', () => requestAnimationFrame(applyGlass));
-let glassT = 0;
 window.matchMedia?.('(max-width:820px) and (max-aspect-ratio:1/1)').addEventListener?.('change', () => ensureWalls());
-window.addEventListener('resize', () => { clearTimeout(glassT); glassT = setTimeout(applyGlass, 150); });
 
 // ---------- Touch devices swipe rails directly; pointer devices keep the arrow buttons ----------
 // Treat phones as touch even if the browser misreports its pointer type (desktop-site mode, in-app browsers).
@@ -1515,8 +1516,6 @@ function settleLightArtwork() {
 document.fonts?.ready.then(settleLightArtwork);
 window.addEventListener('load', settleLightArtwork);
 window.addEventListener('cofilmthemechange', settleLightArtwork);
-window.addEventListener('resize', () => { clearTimeout(layoutLightArtwork._t); layoutLightArtwork._t = setTimeout(layoutLightArtwork, 120); });
-
 // ---------- Navigation text contrast: image area versus light page ----------
 function updateNavContrast() {
   const nav = $('#nav'); if (!nav) return;
@@ -1549,15 +1548,11 @@ function routeInfo() {
   if (h.startsWith('/person/')) return { name: 'person', arg: h.slice(8).split(/[/?]/)[0] };
   if (h.startsWith('/search')) return { name: 'search' };
   if (h.startsWith('/movies')) return { name: 'movies' };
-  if (h.startsWith('/shows')) return { name: 'shows' };
   return { name: 'home' };
 }
-let lastRoute = '';
+let lastRoute = '', lastHtml = '';
 const savedScroll = new Map();
 function render() {
-  stopMovieGalaxy();
-  if (routeInfo().name !== 'movies') movieMenuOpen = '';
-  closeTrailer();                                                  // leaving the page also stops its trailer
   if (location.hash.startsWith('#/genres')) {                       // old Genres links keep working
     let genre = ''; try { genre = decodeURIComponent(location.hash.split('/')[2] || ''); } catch {}
     if (genre) LS.set('view:movies', { ...movieView(), genre });
@@ -1565,19 +1560,24 @@ function render() {
   }
   clearTimeout(rt); // A full render supersedes any pending metadata render.
   const r = routeInfo();
+  if (routeInfo().name !== 'movies') movieMenuOpen = '';
   const sig = location.hash;
   const keepScroll = sig === lastRoute;
-  const y = scrollY;
-  const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
-  const railSections = '.recommend-section,.browse-section';
-  const railIndex = keepScroll ? new Map([...document.querySelectorAll(railSections)].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
   let html = '';
   if (r.name === 'detail') html = viewDetail(r.arg);
   else if (r.name === 'person') html = viewPerson(r.arg);
   else if (r.name === 'search') html = viewSearch();
-  else if (r.name === 'movies') html = viewList('movie');
-  else if (r.name === 'shows') html = viewList('series');
+  else if (r.name === 'movies') html = viewMovies();
   else html = viewHome();
+  // Nothing on this page changed (e.g. metadata of a film elsewhere): keep the DOM, the ring, the trailer and the rails.
+  if (keepScroll && html === lastHtml) { if (!$('#search').hidden) renderSearch(); return; }
+  lastHtml = html;
+  stopMovieGalaxy();
+  closeTrailer();                                                  // leaving the page also stops its trailer
+  const y = scrollY;
+  const castIndex = keepScroll ? castStartIndex($('.cast')) : 0;
+  const railSections = '.recommend-section,.browse-section';
+  const railIndex = keepScroll ? new Map([...document.querySelectorAll(railSections)].map(s => [s.dataset.rowKey, posterRailIndex(s.querySelector('.scroller'))])) : null;
   $('#view').innerHTML = html;
   syncSearchNav();
   // Home and film pages: the page takes the colours of the film on screen, always in the dark cinematic look.
@@ -1609,7 +1609,7 @@ function render() {
     if (r.name === 'movies' && !moviesFlowActive(movieView())) {
       const box = document.querySelector('.movies-galaxy');
       const keys = (box?.dataset.galaxyKeys || '').split(',').filter(Boolean);
-      const picked = keys.map(k => state.items.find(it => it.key === k)).filter(Boolean);
+      const picked = keys.map(itemOf).filter(Boolean);
       startMovieGalaxy(picked);
     }
   });
@@ -1757,7 +1757,7 @@ async function unlockWithCode(raw) {
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(f.iv) }, key, b(f.data));
   const cfg = JSON.parse(new TextDecoder().decode(plain));
   LS.set('od:link', cfg.link); if (cfg.tmdb) LS.set('tmdb:key', cfg.tmdb); LS.del('od:files');
-  ratingsKey = null;
+  resetRatingsKey();
   return true;
 }
 async function tryUnlock(code) {
@@ -1770,19 +1770,21 @@ $('#unlockBtn').onclick = () => tryUnlock($('#codeInput').value);
 $('#codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock($('#codeInput').value); });
 
 // ---------- setup ----------
-function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#tmdbInput').value = LS.get('tmdb:key') || ''; $('#setup').hidden = false; }
+function openSetup() { $('#linkInput').value = LS.get('od:link') || ''; $('#tmdbInput').value = tmdbKey() || ''; $('#setup').hidden = false; }
 $('#saveLink').onclick = () => {
   const v = $('#linkInput').value.trim();
   if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com|.*sharepoint\.com)/.test(v)) { alert('That does not look like a OneDrive share link'); return; }
   const k = $('#tmdbInput').value.trim(); if (k) LS.set('tmdb:key', k); else LS.del('tmdb:key');
-  LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; ratingsKey = null; load(true); loadRatings();
+  LS.set('od:link', v); LS.del('od:files'); $('#setup').hidden = true; resetRatingsKey(); load(true); loadRatings();
 };
 $('#cancelSetup').onclick = () => { $('#setup').hidden = true; };
 $('#clearCache').onclick = () => { Object.keys(localStorage).filter(k => /^(meta[0-9]?|tmdbc|tmdbp|tmdbt|tmdbw):/.test(k)).forEach(k => localStorage.removeItem(k)); $('#setup').hidden = true; load(true); };
 
 // ---------- resize: one layout pass per frame ----------
-let resizeFrame = 0;
+// Lenses and the light-theme fade are costly to rebuild, so they wait until the resizing settles.
+let resizeFrame = 0, resizeSettle = 0;
 window.addEventListener('resize', () => {
+  clearTimeout(resizeSettle); resizeSettle = setTimeout(() => { applyGlass(); layoutLightArtwork(); }, 150);
   if (resizeFrame) return;
   resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; syncTouchRails(); fitCastRail(); fitPosterRails(); updateNavContrast(); fitSearchGrid(); });
 });
@@ -1827,7 +1829,9 @@ document.addEventListener('click', e => {
   const pl = t.closest('[data-play]');
   if (pl) { e.preventDefault(); closeSearch(); play(pl.dataset.play, pl.hasAttribute('data-restart')); return; }
   const pi = t.closest('[data-play-item]');
-  if (pi) { const it = state.items.find(x => x.key === pi.dataset.playItem); const p = progressOf(it); play((p?.f || it.files[0]).id); return; }
+  if (pi) { const it = itemOf(pi.dataset.playItem); if (it) play((progressOf(it)?.f || it.files[0]).id); return; }
+  const sub = t.closest('[data-sub-shift]');
+  if (sub) { const v = Number(sub.dataset.subShift); if (v) shiftSubs(v); else setSubDelay(0); return; }
   if (t.closest('[data-back]')) { e.preventDefault(); if (history.length > 1) history.back(); else location.hash = '#/'; return; }
   const bio = t.closest('[data-bio-toggle]');
   if (bio) { const id = bio.dataset.bioToggle; if (bioOpen.has(id)) bioOpen.delete(id); else bioOpen.add(id); render(); return; }
@@ -1846,7 +1850,7 @@ document.addEventListener('click', e => {
     const name = pick.dataset.moviePick;
     const value = pick.dataset.movieValue ?? '';
     movieMenuOpen = '';                                   // one choice per list: choosing closes it
-    if (name === 'sort' || value !== movieView()[name]) setMovieView({ [name]: value }, `[data-movie-panel="${name}"]`); else syncMovieMenu();
+    if (value !== movieView()[name]) setMovieView({ [name]: value }, `[data-movie-panel="${name}"]`); else syncMovieMenu();
     return;
   }
   const dockPanel = t.closest('[data-movie-panel]');
@@ -1864,10 +1868,14 @@ for (const type of ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'focu
 document.addEventListener('keydown', e => {
   if (!$('#player').hidden && (e.metaKey || e.ctrlKey || e.altKey) && (isSpaceKey(e) || /^(f|m|k|ArrowUp|ArrowDown)$/i.test(e.key))) e.stopPropagation();
 }, true);
+// Z/X shift the subtitles. Caught before the player: it swallows Z/X for its own delay, which is off for this source.
+document.addEventListener('keydown', e => {
+  if (!playerKeyTarget(e) || !/^[zx]$/i.test(e.key)) return;
+  e.stopPropagation(); e.preventDefault();
+  shiftSubs((/z/i.test(e.key) ? -1 : 1) * (e.shiftKey ? SUB_FINE_STEP : SUB_STEP));
+}, true);
 document.addEventListener('keyup', e => { if (isSpaceKey(e) && playerKeyTarget(e)) e.preventDefault(); });
 document.addEventListener('keydown', e => {
-  // Episode rows are buttons for keyboard users too.
-  if ((e.key === 'Enter' || isSpaceKey(e)) && e.target.matches?.('.ep[data-play]')) { e.preventDefault(); play(e.target.dataset.play); return; }
   // Player shortcuts (not while typing in a field, never with Cmd/Ctrl/Alt, so browser shortcuts keep working).
   // The player has its own shortcuts when it has focus and marks the key as handled; never act twice.
   if (playerKeyTarget(e) && !e.defaultPrevented) {
@@ -1884,7 +1892,6 @@ document.addEventListener('keydown', e => {
   else if (!$('#setup').hidden) $('#setup').hidden = true;
 });
 
-// link via URL hash (#link=...) for quick setup on a new device
 const urlCode = new URLSearchParams(location.search).get('code') || new URLSearchParams(location.hash.slice(1)).get('code');
 // A shared link with ?code= opens straight into the library: unlock quietly, ask only if the code is wrong.
 let autoUnlock = null;
@@ -1899,12 +1906,6 @@ if (urlCode) {
       .catch(e => { console.warn(e); toast(''); $('#toast').hidden = true; openSetup(); $('#codeInput').value = urlCode; $('#codeMsg').textContent = 'That code did not work. Please check it and try again.'; })
       .finally(() => { autoUnlock = null; });
   }
-}
-if (/^#(link|tmdb)=/.test(location.hash)) {
-  const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get('link') && h.get('link') !== LS.get('od:link')) { LS.set('od:link', h.get('link')); LS.del('od:files'); }
-  if (h.get('tmdb')) LS.set('tmdb:key', h.get('tmdb'));
-  history.replaceState(null, '', location.pathname);
 }
 if (location.hash === '#settings') { history.replaceState(null, '', location.pathname); setTimeout(openSetup, 0); }
 render();
