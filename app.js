@@ -1,5 +1,5 @@
-import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice, pickGalaxyMovies } from './lib/catalog.mjs?v=142';
-import { initMovieGalaxy, restartMovieGalaxy } from './lib/galaxy.mjs?v=142';
+import { VIDEO_EXT, SUB_EXT, parseName, keyOf, tscore as titleScore, isFreshMeta, compactPerson, libraryMatches, lifeLine, decadeOf, filterMovieFacts, sortMovieFacts, titlesWithPerson, moviesFlowActive, moviePageSlice } from './lib/catalog.mjs?v=143';
+import { initMovieHelix, helixOrder } from './lib/helix.mjs?v=143';
 // CoFilm: OneDrive share link -> poster wall -> in-browser playback (Movi Player)
 const BADGER_APP = '5cbed6ac-a083-4e14-b191-b4ba07653de2';
 const API = 'https://my.microsoftpersonalcontent.com/_api/v2.0';
@@ -817,8 +817,8 @@ function viewHome() {
     </div>`;
 }
 // ---------- Movies page: filters (remembered for this visit) ----------
-const MOVIE_VIEW_DEFAULT = { genre: '', decade: '', country: '', only4k: false, page: 1, galaxySeed: 0 };
-// Every page load starts from the galaxy ring. A choice made earlier (including an old sort from before the sort control was
+const MOVIE_VIEW_DEFAULT = { genre: '', decade: '', country: '', only4k: false, page: 1 };
+// Every page load starts from the poster helix. A choice made earlier (including an old sort from before the sort control was
 // removed) used to be remembered across reloads and silently kept the page on the poster grid; now it lasts only for this visit.
 LS.del('view:movies');
 let movieGalaxyCtrl = null;
@@ -850,7 +850,7 @@ function setMovieView(patch, focus) {
   keepFocus(focus);
 }
 // The controls sit directly in ONE liquid-glass bar. Genre, Decade and Country open a glass list above the bar;
-// 4K only and Shuffle ring are plain buttons. `movieMenuOpen` is the name of the open list, or ''.
+// 4K only is a plain button. `movieMenuOpen` is the name of the open list, or ''.
 let movieMenuOpen = '';
 function movieChoice(name, label, options, value) {
   return `<div class="movie-menu-group" data-movie-group="${name}"${movieMenuOpen === name ? '' : ' hidden'}>
@@ -871,7 +871,7 @@ function syncMovieMenu() {
 function movieDock(view, genres, decades, countries, meta) {
   const active = moviesFlowActive(view);      // something is chosen: Reset is offered
   const chip = (name, text) => `<button type="button" class="movie-chip${movieMenuOpen === name ? ' open' : ''}${view[name] ? ' set' : ''}" data-movie-panel="${name}" aria-haspopup="listbox" aria-expanded="${movieMenuOpen === name}">${esc(text)}</button>`;
-  const pages = meta.flow && meta.pages > 1      // page controls belong to the poster grid only; the ring always shows its own 22
+  const pages = meta.flow && meta.pages > 1      // page controls belong to the poster grid only; the helix holds every film
     ? `<div class="movie-dock-pages">
       <button type="button" class="movie-dock-page" data-movie-page="prev" aria-label="Previous page"${meta.page <= 1 ? ' disabled' : ''}>\u2039</button>
       <span class="movie-dock-page-label">Page ${meta.page} of ${meta.pages}</span>
@@ -888,7 +888,6 @@ function movieDock(view, genres, decades, countries, meta) {
       ${chip('decade', view.decade ? view.decade + 's' : 'All decades')}
       ${chip('country', view.country || 'All countries')}
       <button type="button" class="movie-chip${view.only4k ? ' open' : ''}" data-movie-4k aria-pressed="${!!view.only4k}">4K only</button>
-      ${meta.flow ? '' : '<button type="button" class="movie-chip" data-galaxy-reshuffle>Shuffle ring</button>'}
       ${active ? '<button type="button" class="movie-chip movie-chip-reset" data-movie-reset>Reset</button>' : ''}
     </div>
     <span class="movie-ind lg" data-movie-ind aria-hidden="true"></span>
@@ -912,12 +911,19 @@ function placeMovieInd(target) {
 }
 function startMovieGalaxy(picked) {
   stopMovieGalaxy();
-  const viewport = document.getElementById('movieGalaxyViewport');
+  const viewport = document.getElementById('movieHelixViewport');
   if (!viewport || !picked.length) return;
-  movieGalaxyCtrl = initMovieGalaxy(viewport, picked, {
+  movieGalaxyCtrl = initMovieHelix(viewport, picked, {
     posterUrl: it => posterOf(it) || it.files[0]?.thumb || '',
+    describe: it => { const f = movieFacts(it); return { title: f.title, year: f.year, genres: f.genres, countries: f.countries, rating: it.meta?.rating || '' }; },
     onOpen: key => { location.hash = '#/t/' + enc(key); },
   });
+}
+// A choice that turns the helix into the poster grid lets the posters fall away first.
+function leaveHelixThen(patch, focus) {
+  const next = { ...movieView(), ...patch };
+  if (movieGalaxyCtrl && moviesFlowActive(next)) { const ctl = movieGalaxyCtrl; ctl.leave(() => { if (movieGalaxyCtrl === ctl) setMovieView(patch, focus); }); }
+  else setMovieView(patch, focus);
 }
 function viewMovies() {
   const all = state.items;
@@ -933,20 +939,16 @@ function viewMovies() {
   const view = { ...saved, genre: genres.includes(saved.genre) ? saved.genre : '', decade: decades.includes(Number(saved.decade)) ? saved.decade : '', country: countries.includes(saved.country) ? saved.country : '' };
   const filtered = sortMovieFacts(filterMovieFacts(facts, view)).map(f => f.it);
   const flow = moviesFlowActive(view);   // the ring also runs on phones (finger drag)
-  let viewResolved = view;
-  if (!flow && !view.galaxySeed) {
-    viewResolved = { ...view, galaxySeed: Date.now() };
-    LS.set('view:movies', viewResolved);
-  }
+  const viewResolved = view;
   const slice = moviePageSlice(filtered, viewResolved.page);
   const pool = all.filter(it => posterOf(it) || it.files[0]?.thumb);
-  const galaxyPick = pickGalaxyMovies(pool, viewResolved.galaxySeed || 1);
-  const galaxyPickKeys = galaxyPick.map(it => it.key).join(',');
+  const helixItems = helixOrder(pool, yearOf);   // every film, oldest first
+  const helixKeys = helixItems.map(it => it.key).join(',');
+  // posters arrive while the library loads: a change of poster must rebuild the helix, not keep the old DOM
+  let helixSig = 0; for (const ch of helixItems.map(it => posterOf(it) || it.files[0]?.thumb || '').join('|')) helixSig = (helixSig * 31 + ch.charCodeAt(0)) | 0;
   const flowBlock = `<div class="movies-flow"><div class="grid">${slice.items.map(it => card(it, { caption: caption(it) })).join('') || '<p class="empty">No movies match these filters.</p>'}</div></div>`;
-  const galaxyBlock = `<div class="movies-galaxy" data-galaxy-keys="${esc(galaxyPickKeys)}">
-    <div class="galaxy-viewport" id="movieGalaxyViewport"><div class="galaxy-ring" id="movieGalaxyRing"></div></div>
-  </div>`;
-  return `<div class="page movies-page${flow ? ' movies-page--flow' : ' movies-page--galaxy'}${movieMenuOpen ? ' menu-open' : ''}">
+  const galaxyBlock = `<div class="movies-helix" data-helix-keys="${esc(helixKeys)}" data-helix-sig="${helixSig}"><div class="helix-viewport" id="movieHelixViewport"></div></div>`;
+  return `<div class="page movies-page${flow ? ' movies-page--flow' : ' movies-page--helix'}${movieMenuOpen ? ' menu-open' : ''}">
     <h1 class="sr-only">Movies</h1>
     <div class="movies-stage">${flow ? flowBlock : galaxyBlock}</div>
     ${movieDock(viewResolved, genres, decades, countries, { flow, page: slice.page, pages: slice.pages, total: slice.total })}</div>`;
@@ -1607,8 +1609,8 @@ function render() {
     settleLightArtwork();
     updateNavContrast();
     if (r.name === 'movies' && !moviesFlowActive(movieView())) {
-      const box = document.querySelector('.movies-galaxy');
-      const keys = (box?.dataset.galaxyKeys || '').split(',').filter(Boolean);
+      const box = document.querySelector('.movies-helix');
+      const keys = (box?.dataset.helixKeys || '').split(',').filter(Boolean);
       const picked = keys.map(itemOf).filter(Boolean);
       startMovieGalaxy(picked);
     }
@@ -1837,7 +1839,6 @@ document.addEventListener('click', e => {
   if (bio) { const id = bio.dataset.bioToggle; if (bioOpen.has(id)) bioOpen.delete(id); else bioOpen.add(id); render(); return; }
   const retry = t.closest('[data-person-retry]');
   if (retry) { personFailed.delete(retry.dataset.personRetry); render(); return; }
-  if (t.closest('[data-galaxy-reshuffle]')) { restartMovieGalaxy(); setMovieView({ galaxySeed: Date.now() }); return; }
   const pageBtn = t.closest('[data-movie-page]');
   if (pageBtn && !pageBtn.disabled) {
     const v = movieView();
@@ -1850,13 +1851,13 @@ document.addEventListener('click', e => {
     const name = pick.dataset.moviePick;
     const value = pick.dataset.movieValue ?? '';
     movieMenuOpen = '';                                   // one choice per list: choosing closes it
-    if (value !== movieView()[name]) setMovieView({ [name]: value }, `[data-movie-panel="${name}"]`); else syncMovieMenu();
+    if (value !== movieView()[name]) { syncMovieMenu(); leaveHelixThen({ [name]: value }, `[data-movie-panel="${name}"]`); } else syncMovieMenu();
     return;
   }
   const dockPanel = t.closest('[data-movie-panel]');
   if (dockPanel) { const n = dockPanel.dataset.moviePanel; movieMenuOpen = movieMenuOpen === n ? '' : n; syncMovieMenu(); return; }
   if (movieMenuOpen && !t.closest('[data-movie-dock]')) { movieMenuOpen = ''; syncMovieMenu(); }
-  if (t.closest('[data-movie-4k]')) { setMovieView({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
+  if (t.closest('[data-movie-4k]')) { leaveHelixThen({ only4k: !movieView().only4k }, '[data-movie-4k]'); return; }
   if (t.closest('[data-movie-reset]')) { LS.del('view:movies'); render(); keepFocus('[data-movie-panel]'); return; }
   if (t.closest('[data-close-search]')) { closeSearch(); return; }
   if (t.closest('#search .card')) { closeSearch(); return; }

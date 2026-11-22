@@ -357,7 +357,7 @@ test('Movies page: no count heading, no hint, no Browse chip, no umbrella Filter
   for (const gone of [/Drag the ring/,/Browse: /,/movie-dock-hint/,/>Filters</,/data-movie-menu/,/<h1>Movies <span/]) assert.doesNotMatch(source,gone);
   assert.match(source,/<div class="movie-bar lg" role="group"/);
   for (const name of ['genre','decade','country']) assert.match(source,new RegExp("chip\\('"+name+"'"));
-  assert.match(source,/data-movie-4k/);assert.match(source,/Shuffle ring/);
+  assert.match(source,/data-movie-4k/);assert.doesNotMatch(source,/Shuffle ring/);
   assert.match(css,/\.movie-menu-scroll\{[^}]*max-height:/);assert.doesNotMatch(css.match(/\.movie-menu\{[^}]*\}/)[0],/overflow/);
 });
 test('Movies lists: one open at a time, choosing closes it; outside click, Escape and leaving the page close it too',()=>{
@@ -366,7 +366,7 @@ test('Movies lists: one open at a time, choosing closes it; outside click, Escap
   assert.match(source,/movieMenuOpen = '';\s+\/\/ one choice per list: choosing closes it/);
   assert.match(source,/if \(closeTrailer\(\)\) return;\n  if \(movieMenuOpen\) \{ movieMenuOpen = ''; syncMovieMenu\(\); return; \}/);
   assert.match(source,/if \(routeInfo\(\)\.name !== 'movies'\) movieMenuOpen = '';/);
-  assert.match(source,/restartMovieGalaxy\(\); setMovieView\(\{ galaxySeed: Date\.now\(\) \}\)/);
+  assert.match(source,/leaveHelixThen\(\{ \[name\]: value \}/);
 });
 test('an open list is tinted for legibility and the ring recedes behind it',()=>{
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
@@ -389,4 +389,14 @@ test('the ring viewport has no grab cursor, and keeps touch-action:none so a fin
   const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
   const rule=css.match(/\.galaxy-viewport\{[^}]*\}/)[0];
   assert.match(rule,/cursor:default/);assert.doesNotMatch(rule,/cursor:grab/);assert.match(rule,/touch-action:none/);
+});
+
+test('Movies: the helix is the default view, holds every film oldest first, and posters fall away before a filter shows the grid',()=>{
+  assert.match(source,/import \{ initMovieHelix, helixOrder \} from '\.\/lib\/helix\.mjs\?v=/);
+  assert.match(source,/helixOrder\(pool, yearOf\)/);
+  assert.match(source,/id="movieHelixViewport"/);
+  assert.match(source,/if \(movieGalaxyCtrl && moviesFlowActive\(next\)\)/);
+  assert.match(source,/leaveHelixThen\(\{ only4k: /);
+  const css=fs.readFileSync(new URL('../style.css',import.meta.url),'utf8');
+  assert.match(css.match(/\.helix-viewport\{[^}]*\}/)[0],/touch-action:none/);
 });

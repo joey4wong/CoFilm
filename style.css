@@ -417,6 +417,39 @@ body{overflow-x:clip}
 .g-card-poster{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;user-select:none}
 .g-card-fallback{display:flex;align-items:center;justify-content:center;height:100%;padding:6px;font-size:10px;font-weight:600;text-align:center;color:rgba(255,255,255,.75);line-height:1.2}
 .g-dust{position:absolute;left:0;top:0;width:4px;height:4px;border-radius:999px;background:rgba(255,255,255,.55);box-shadow:0 0 10px rgba(255,255,255,.35);pointer-events:none;transform-style:preserve-3d;will-change:transform,opacity}
+/* Movies: the poster helix (default view). Every film hangs on one string that winds down a 3D helix, oldest first. */
+.movies-helix{width:100%}
+html:has(.movies-page--helix){overflow:hidden}
+.movies-page--helix .movies-stage{min-height:0}
+.helix-viewport{position:fixed;inset:0;z-index:5;overflow:hidden;perspective:1400px;perspective-origin:50% 50%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;--hx-tint:255,255,255}
+.helix-viewport.dragging{cursor:grabbing}
+.hx-thread{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hx-front{z-index:2}
+.hx-cards{position:absolute;left:50%;top:50%;width:0;height:0;z-index:1;transform-style:preserve-3d}
+.hx-card{position:absolute;left:0;top:0;width:var(--hx-cw);height:var(--hx-ch);margin:calc(var(--hx-ch) / -2) 0 0 calc(var(--hx-cw) / -2);border-radius:10px;overflow:hidden;background:#141414;cursor:pointer;will-change:transform,opacity;box-shadow:0 24px 60px rgba(0,0,0,.7);outline:1px solid rgba(255,255,255,.07);outline-offset:-1px;transition:box-shadow .5s}
+.hx-card img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;-webkit-user-drag:none}
+.hx-card::after{content:"";position:absolute;inset:0;background:#000;opacity:var(--hx-shade,0);pointer-events:none}
+.hx-card.on{box-shadow:0 30px 90px rgba(var(--hx-tint),.28),0 0 0 1px rgba(var(--hx-tint),.35)}
+.hx-fallback{display:flex;align-items:center;justify-content:center;height:100%;padding:8px;font-size:12px;font-weight:600;text-align:center;color:rgba(255,255,255,.75)}
+.hx-counter{position:absolute;z-index:3;top:30px;right:64px;text-align:right;pointer-events:none;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+.hx-year{font-size:34px;font-weight:500;line-height:1;letter-spacing:.06em;color:rgb(var(--hx-tint));transition:color .6s}
+.hx-index{font-size:10.5px;letter-spacing:.08em;opacity:.5;margin-top:8px;color:#fff}
+.hx-caption{position:absolute;z-index:3;left:0;right:0;bottom:104px;text-align:center;pointer-events:none;color:#fff;padding:0 16px}
+.hx-title{font-size:22px;font-weight:700;letter-spacing:-.01em;transition:opacity .35s,transform .35s}
+.hx-meta{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;white-space:pre;opacity:.5;margin-top:7px;transition:opacity .35s}
+.hx-caption.swap .hx-title,.hx-caption.swap .hx-meta{opacity:0;transform:translateY(6px)}
+.hx-ruler{position:absolute;z-index:3;right:22px;top:50%;transform:translateY(-50%);height:min(58vh,540px);width:28px;cursor:ns-resize;touch-action:none}
+.hx-ruler i{position:absolute;right:0;height:1px;width:8px;background:rgba(255,255,255,.22);transition:width .25s,background .25s}
+.hx-ruler i.dec{width:13px;background:rgba(255,255,255,.4)}
+.hx-ruler i.on{width:22px;height:2px;background:rgb(var(--hx-tint))}
+.hx-ruler b{position:absolute;right:30px;transform:translateY(-50%);font:400 9px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;color:#fff;opacity:.35;white-space:nowrap}
+@media (max-width:700px){
+  .hx-counter{top:84px;right:18px}
+  .hx-year{font-size:24px}
+  .hx-ruler{display:none}
+  .hx-caption{bottom:92px}
+  .hx-title{font-size:18px}
+}
 .movie-dock{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;width:min(760px,calc(100vw - 28px));display:flex;flex-direction:column;align-items:center;gap:12px;pointer-events:none}
 .movie-dock > *{pointer-events:auto}
 /* One glass bar holds every control; the list for Genre / Decade / Country opens above it in a second glass sheet. */
